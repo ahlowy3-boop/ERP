@@ -2,6 +2,7 @@ import {
   Controller,
   Get,
   Post,
+  Put,
   Body,
   Patch,
   Param,
@@ -42,6 +43,16 @@ export class MrvsController {
   @Patch(':id')
   @RequirePermissions('edit:inventory')
   async update(
+    @Param('id') id: string,
+    @Body() updateMrvDto: any,
+    @CurrentUser('id') userId: string,
+  ) {
+    return this.mrvsService.update(id, updateMrvDto, userId);
+  }
+
+  @Put(':id')
+  @RequirePermissions('edit:inventory')
+  async replace(
     @Param('id') id: string,
     @Body() updateMrvDto: any,
     @CurrentUser('id') userId: string,

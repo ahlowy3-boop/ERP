@@ -24,6 +24,7 @@ import { DepartmentsModule } from './modules/admin/departments/departments.modul
 // 🛒 استيراد موديولات دورة العمل
 import { PurchaseRequestsModule } from './modules/procurement/purchase-requests/purchase-requests.module';
 import { PurchaseOrdersModule } from './modules/procurement/purchase-orders/purchase-orders.module';
+import { VendorsModule } from './modules/vendors/vendors.module';
 import { MrvsModule } from './modules/inventory/mrvs/mrvs.module';
 import { ReportsModule as InventoryReportsModule } from './modules/inventory/reports/reports.module';
 import { InventoryAliasModule } from './modules/inventory/inventory-alias.module';
@@ -37,6 +38,9 @@ import { ContractsModule } from './modules/workflow/contracts/contracts.module';
 
 // 🔧 Maintenance
 import { MaintenanceModule } from './modules/maintenance/maintenance.module';
+
+// 📁 Asset Categories
+import { AssetCategoriesModule } from './modules/assets/categories/categories.module';
 
 // ⚡ Phase 2 — Field Operations, Fuel, Fleet, Camps
 import { ProjectResourcesModule } from './modules/projects/project-resources.module';
@@ -103,6 +107,7 @@ import { FinanceModule } from './modules/finance/finance.module';
     // 7. موديولات الـ ERP
     PurchaseRequestsModule,
     PurchaseOrdersModule,
+    VendorsModule,
     MrvsModule,
     InventoryAliasModule,
 
@@ -115,6 +120,9 @@ import { FinanceModule } from './modules/finance/finance.module';
 
     // 8b. Maintenance
     MaintenanceModule,
+
+    // 8c. Asset Categories
+    AssetCategoriesModule,
 
     // 9. Phase 2 — Field Operations, Fuel, Fleet, Camps
     ProjectResourcesModule,

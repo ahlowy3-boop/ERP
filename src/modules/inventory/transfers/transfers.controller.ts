@@ -2,6 +2,7 @@ import {
   Controller,
   Get,
   Post,
+  Put,
   Body,
   Patch,
   Param,
@@ -44,6 +45,16 @@ export class TransfersController {
   @Patch(':id')
   @RequirePermissions('edit:inventory')
   async update(
+    @Param('id') id: string,
+    @Body() updateTransferDto: any,
+    @CurrentUser('id') userId: string,
+  ) {
+    return this.transfersService.update(id, updateTransferDto, userId);
+  }
+
+  @Put(':id')
+  @RequirePermissions('edit:inventory')
+  async replace(
     @Param('id') id: string,
     @Body() updateTransferDto: any,
     @CurrentUser('id') userId: string,

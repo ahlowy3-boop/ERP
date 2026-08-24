@@ -2,6 +2,7 @@ import {
   Controller,
   Get,
   Post,
+  Put,
   Body,
   Patch,
   Param,
@@ -41,6 +42,16 @@ export class MivsController {
   @Patch(':id')
   @RequirePermissions('edit:inventory')
   async update(
+    @Param('id') id: string,
+    @Body() updateMivDto: any,
+    @CurrentUser('id') userId: string,
+  ) {
+    return this.mivsService.update(id, updateMivDto, userId);
+  }
+
+  @Put(':id')
+  @RequirePermissions('edit:inventory')
+  async replace(
     @Param('id') id: string,
     @Body() updateMivDto: any,
     @CurrentUser('id') userId: string,

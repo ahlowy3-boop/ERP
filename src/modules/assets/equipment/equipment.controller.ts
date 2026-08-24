@@ -2,6 +2,7 @@ import {
   Controller,
   Get,
   Post,
+  Put,
   Patch,
   Delete,
   Body,
@@ -47,6 +48,16 @@ export class EquipmentController {
     @CurrentUser('id') userId: string,
   ) {
     return this.equipmentService.create(dto, userId);
+  }
+
+  // PUT /api/v1/assets/equipment/:id — Full update
+  @Put(':id')
+  update(
+    @Param('id') id: string,
+    @Body() dto: any,
+    @CurrentUser('id') userId: string,
+  ) {
+    return this.equipmentService.update(id, dto, userId);
   }
 
   // PATCH /api/v1/assets/equipment/:id/status

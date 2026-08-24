@@ -5,6 +5,7 @@ import {
   Get,
   Query,
   Patch,
+  Put,
   Param,
   Delete,
   UseInterceptors,
@@ -35,6 +36,11 @@ export class ItemsController {
   @Patch(':id')
   async update(@Param('id') id: string, @Body() updateDto: any) {
     return this.itemsService.update(id, updateDto);
+  }
+
+  @Put(':id')
+  async replace(@Param('id') id: string, @Body() dto: any) {
+    return this.itemsService.update(id, dto);
   }
 
   @Delete(':id')

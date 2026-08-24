@@ -5,6 +5,7 @@ import {
   Get,
   Query,
   Patch,
+  Put,
   Param,
   ParseIntPipe,
 } from '@nestjs/common';
@@ -27,5 +28,10 @@ export class WarehousesController {
   @Patch(':id')
   async update(@Param('id') id: string, @Body() updateDto: any) {
     return this.warehousesService.update(id, updateDto);
+  }
+
+  @Put(':id')
+  async replace(@Param('id') id: string, @Body() dto: any) {
+    return this.warehousesService.update(id, dto);
   }
 }

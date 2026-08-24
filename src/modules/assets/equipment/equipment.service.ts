@@ -270,4 +270,20 @@ export class EquipmentService {
     this.logger.log(`Equipment ${eq.equipmentCode} scrapped by ${userId}`);
     return { message: 'Equipment scrapped successfully', data: updated };
   }
+
+  // ─── Full Update (PUT) ────────────────────────────────────────────────────
+  async update(id: string, dto: any, userId: string) {
+    const eq = await this.equipmentModel.findById(id);
+    if (!eq) throw new NotFoundException('Equipment not found');
+    // Immutable fields
+    const { assetNumber, equipmentCode, serialNumber, category, purchaseDate, ...safeDto } = dto;
+    const updated = await this.equipmentModel.findByIdAndUpdate(
+      id,
+      { $set: safeDto },
+      { new: true },
+    ).lean();
+    this.logger.log(`Equipment ${eq.equipmentCode} updated by ${userId}`);
+    return updated;
+  }
 }
+

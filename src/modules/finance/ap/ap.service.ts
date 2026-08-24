@@ -314,4 +314,87 @@ export class ApService {
       session.endSession();
     }
   }
+
+  // ─── Approve Invoice ───────────────────────────────────────────────────────
+  async approveInvoice(id: string, dto: { approvalNotes?: string }, userId: string) {
+    const session = await this.connection.startSession();
+    session.startTransaction();
+    try {
+      const invoice = await this.supplierInvoiceModel.findById(id).session(session);
+      if (!invoice) throw new NotFoundException('Invoice not found');
+      if (!['Draft', 'Pending'].includes(invoice.status)) {
+        throw new BadRequestException(`Invoice cannot be approved in status: ${invoice.status}`);
+      }
+
+      // Create GL Journal Entry
+      // DR 520000 Purchases/Expense = subTotal
+      // DR 215000 VAT Receivable = taxAmount
+      // CR 210000 Accounts Payable = totalAmount
+      const subTotal    = invoice.subTotal    || invoice.amount || 0;
+      const taxAmount   = invoice.taxAmount   || invoice.vatAmount || 0;
+      const totalAmount = invoice.totalAmount || (subTotal + taxAmount);
+
+      const journalNumber = await this.nextJENumber(session);
+      const [glEntry] = await this.journalEntryModel.create([{
+        journalNumber,
+        entryDate: new Date(),
+        description: `AP Invoice Approval: ${invoice.invoiceNumber || id}`,
+        reference: invoice.invoiceNumber || id,
+        sourceType: 'APInvoice',
+        sourceId: invoice._id,
+        lines: [
+          { accountCode: '520000', accountName: 'Purchases / Expense',  type: 'Debit',  amount: subTotal  },
+          { accountCode: '215000', accountName: 'VAT Receivable',        type: 'Debit',  amount: taxAmount  },
+          { accountCode: '210000', accountName: 'Accounts Payable',      type: 'Credit', amount: totalAmount },
+        ],
+        totalDebit:  +(subTotal + taxAmount).toFixed(2),
+        totalCredit: +totalAmount.toFixed(2),
+        status: 'Posted',
+        createdBy: userId,
+      }], { session });
+
+      const updated = await this.supplierInvoiceModel.findByIdAndUpdate(
+        id,
+        {
+          $set: {
+            status: 'Approved',
+            approvedBy: userId,
+            approvedAt: new Date(),
+            approvalNotes: dto.approvalNotes,
+            glEntryId: glEntry._id,
+            glEntryNumber: glEntry.journalNumber,
+          },
+        },
+        { new: true, session },
+      ).lean();
+
+      await session.commitTransaction();
+      this.logger.log(`AP Invoice ${invoice.invoiceNumber} approved by ${userId}`);
+      return { ...updated, glEntry: { journalNumber: glEntry.journalNumber, _id: glEntry._id } };
+    } catch (err) {
+      await session.abortTransaction();
+      throw err;
+    } finally {
+      session.endSession();
+    }
+  }
+
+  // ─── Reject Invoice ────────────────────────────────────────────────────────
+  async rejectInvoice(id: string, dto: { rejectionReason: string }, userId: string) {
+    const invoice = await this.supplierInvoiceModel.findById(id);
+    if (!invoice) throw new NotFoundException('Invoice not found');
+    if (!['Draft', 'Pending', 'Approved'].includes(invoice.status)) {
+      throw new BadRequestException(`Invoice cannot be rejected in status: ${invoice.status}`);
+    }
+    if (!dto.rejectionReason) throw new BadRequestException('Rejection reason is required');
+
+    const updated = await this.supplierInvoiceModel.findByIdAndUpdate(
+      id,
+      { $set: { status: 'Rejected', rejectionReason: dto.rejectionReason, rejectedBy: userId, rejectedAt: new Date() } },
+      { new: true },
+    ).lean();
+
+    this.logger.log(`AP Invoice ${invoice.invoiceNumber} rejected by ${userId}`);
+    return { status: 'Rejected', rejectionReason: dto.rejectionReason, data: updated };
+  }
 }

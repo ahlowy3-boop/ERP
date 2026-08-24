@@ -14,4 +14,10 @@ export class CountsController {
   async complete(@Param('id') id: string) {
     return this.countsService.completeCount(id);
   }
+
+  // Alias POST /api/v1/inventory/counts/:id/complete (frontend compatibility)
+  @Post(':id/complete')
+  async completePost(@Param('id') id: string) {
+    return this.countsService.completeCount(id);
+  }
 }

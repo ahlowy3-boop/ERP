@@ -247,6 +247,9 @@ export class RfqsService {
       data: quotation,
     };
   }
+  // NOTE: vendors are stored as embedded plain objects (not Mongoose ObjectId refs),
+  // so .populate() is not applicable. Each vendor entry already contains vendorId (string),
+  // vendorName, contactEmail, status, invitationSentDate as set at creation time.
   async findAll(page: number = 1, limit: number = 20) {
     return await this._RfqsRepository.findAll({
       paginate: { page, limit },
@@ -258,7 +261,8 @@ export class RfqsService {
     const rfq = await this._RfqsRepository.findOne({ filter: { _id: id } });
     if (!rfq) throw new NotFoundException('RFQ not found');
 
-    // جلب عروض الأسعار المرتبطة به
+    // vendors[] is already embedded inline — full vendor objects are returned as-is.
+    // quotations are fetched separately and merged into the response.
     const quotations = await this._QuotationsRepository.findAll({
       filter: { rfqId: id },
     });
