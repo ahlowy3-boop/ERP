@@ -32,6 +32,20 @@ export class PurchaseOrdersController {
       approveDto.comments,
     );
   }
+
+  // Alias PATCH :id/approve for frontend compatibility
+  @Patch(':id/approve')
+  async approvePoPatch(
+    @Param('id') poId: string,
+    @Body() approveDto: any,
+  ) {
+    return this.poService.approveStep(
+      poId,
+      approveDto.role || approveDto.action,
+      approveDto.approverName,
+      approveDto.comments,
+    );
+  }
   @Patch(':id/contract')
   @UseInterceptors(FileInterceptor('contractFile'))
   async uploadContract(

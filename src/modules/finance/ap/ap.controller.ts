@@ -66,4 +66,48 @@ export class ApController {
   ) {
     return this.apService.rejectInvoice(id, dto, req.user?.id);
   }
+
+  // ─── AP Suppliers ─────────────────────────────────────────────────────────
+  @Get('suppliers')
+  @Roles(UserRole.SuperAdmin, UserRole.GeneralManager, UserRole.FinanceManager, UserRole.ProcurementManager)
+  @RequirePermissions('view:finance')
+  findAllSuppliers(@Query() query: any) {
+    return this.apService.findAllSuppliers(query);
+  }
+
+  @Post('suppliers')
+  @Roles(UserRole.SuperAdmin, UserRole.GeneralManager, UserRole.FinanceManager)
+  @RequirePermissions('edit:finance')
+  createSupplier(@Body() dto: any) {
+    return this.apService.createSupplier(dto);
+  }
+
+  @Patch('suppliers/:id')
+  @Roles(UserRole.SuperAdmin, UserRole.GeneralManager, UserRole.FinanceManager)
+  @RequirePermissions('edit:finance')
+  updateSupplier(@Param('id') id: string, @Body() dto: any) {
+    return this.apService.updateSupplier(id, dto);
+  }
+
+  @Patch('suppliers/:id/toggle-status')
+  @Roles(UserRole.SuperAdmin, UserRole.GeneralManager, UserRole.FinanceManager)
+  @RequirePermissions('edit:finance')
+  toggleSupplierStatus(@Param('id') id: string) {
+    return this.apService.toggleSupplierStatus(id);
+  }
+
+  // ─── AP Invoice Workflow ───────────────────────────────────────────────────
+  @Patch('invoices/:id/submit')
+  @Roles(UserRole.SuperAdmin, UserRole.GeneralManager, UserRole.FinanceManager)
+  @RequirePermissions('edit:finance')
+  submitInvoice(@Param('id') id: string, @Request() req: any) {
+    return this.apService.submitInvoice(id, req.user?.id);
+  }
+
+  @Patch('invoices/:id/queue-payment')
+  @Roles(UserRole.SuperAdmin, UserRole.GeneralManager, UserRole.FinanceManager)
+  @RequirePermissions('approve:finance')
+  queueForPayment(@Param('id') id: string, @Request() req: any) {
+    return this.apService.queueForPayment(id, req.user?.id);
+  }
 }

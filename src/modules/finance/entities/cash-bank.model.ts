@@ -143,3 +143,36 @@ BankReconciliationSchema.index({ statementEndDate: -1 });
 export const BankReconciliationModel = MongooseModule.forFeature([
   { name: BankReconciliationModelName, schema: BankReconciliationSchema },
 ]);
+
+// ──────────────────────────────────────────────────────────────
+// TREASURY TRANSFER (تحويل بيني)
+// ──────────────────────────────────────────────────────────────
+export const TreasuryTransferModelName = 'TreasuryTransfer';
+
+@Schema({ timestamps: true, collection: 'treasury_transfers' })
+export class TreasuryTransfer extends Document {
+  @Prop({ required: true, unique: true }) transferNumber!: string; // TRF-YYYY-XXXX
+  @Prop({ type: Types.ObjectId, required: true }) fromAccountId!: Types.ObjectId;
+  @Prop({ type: String, enum: ['Bank','Cash'], required: true }) fromAccountType!: string;
+  @Prop({ type: String }) fromAccountName?: string;
+  @Prop({ type: Types.ObjectId, required: true }) toAccountId!: Types.ObjectId;
+  @Prop({ type: String, enum: ['Bank','Cash'], required: true }) toAccountType!: string;
+  @Prop({ type: String }) toAccountName?: string;
+  @Prop({ type: Number, required: true, min: 0.01 }) amount!: number;
+  @Prop({ type: String, default: 'SAR' }) currency!: string;
+  @Prop({ type: Date, required: true }) transferDate!: Date;
+  @Prop({ type: String }) reference?: string;
+  @Prop({ type: String }) notes?: string;
+  @Prop({ type: String, enum: ['Draft','Approved','Executed','Cancelled'], default: 'Draft' }) status!: string;
+  @Prop({ type: String }) branchId?: string;
+  @Prop({ type: String }) approvedBy?: string;
+  @Prop({ type: Date }) approvedAt?: Date;
+  @Prop({ type: String }) executedBy?: string;
+  @Prop({ type: Date }) executedAt?: Date;
+  @Prop({ type: Types.ObjectId, ref: 'JournalEntry' }) glEntryId?: Types.ObjectId;
+  @Prop({ type: String }) glEntryNumber?: string;
+  @Prop({ type: String }) createdBy?: string;
+}
+
+export const TreasuryTransferSchema = SchemaFactory.createForClass(TreasuryTransfer);
+export const TreasuryTransferModel = MongooseModule.forFeature([{ name: TreasuryTransferModelName, schema: TreasuryTransferSchema }]);

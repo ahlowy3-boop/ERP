@@ -1,5 +1,5 @@
 import { UserRole } from 'src/DB/enums/user.enum';
-import { Controller, Get, Post, Put, Delete, Body, Param, Query, UseGuards, Request } from '@nestjs/common';
+import { Controller, Get, Post, Put, Patch, Delete, Body, Param, Query, UseGuards, Request } from '@nestjs/common';
 import { BudgetService } from './budget.service';
 import { Roles } from '../../../common/decorators/roles.decorator';
 import { RequirePermissions } from '../../../common/decorators/permissions.decorator';
@@ -27,6 +27,13 @@ export class BudgetController {
   @RequirePermissions('edit:finance')
   update(@Param('id') id: string, @Body() dto: any) {
     return this.budgetService.update(id, dto);
+  }
+
+  @Patch(':id/status')
+  @Roles(UserRole.SuperAdmin, UserRole.GeneralManager, UserRole.FinanceManager)
+  @RequirePermissions('edit:finance')
+  updateStatus(@Param('id') id: string, @Body() dto: any, @Request() req: any) {
+    return this.budgetService.updateStatus(id, dto, req.user?.id);
   }
 
   @Delete(':id')

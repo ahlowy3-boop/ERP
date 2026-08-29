@@ -1,4 +1,4 @@
-import { Injectable, NotFoundException, ConflictException, Logger } from '@nestjs/common';
+import { Injectable, NotFoundException, BadRequestException, ConflictException, Logger } from '@nestjs/common';
 import { InjectModel } from '@nestjs/mongoose';
 import { Model, Types } from 'mongoose';
 import { ProjectBudgetModelName } from '../entities/budget.model';
@@ -160,5 +160,27 @@ export class BudgetService {
       throw new NotFoundException('Budget not found');
     }
     return { message: 'Budget deleted successfully' };
+  }
+
+  async updateStatus(id: string, dto: { status: string; comments?: string; approvedBy?: string }, userId: string) {
+    const budget = await this.budgetModel.findById(id);
+    if (!budget) throw new NotFoundException('Budget not found');
+    const allowedTransitions: Record<string, string[]> = {
+      Draft: ['Submitted', 'Cancelled'],
+      Submitted: ['Approved', 'Cancelled', 'Draft'],
+      Approved: ['Active', 'Cancelled'],
+      Active: ['Closed', 'Cancelled'],
+    };
+    const allowed = allowedTransitions[budget.status] || [];
+    if (!allowed.includes(dto.status)) {
+      throw new BadRequestException(`Cannot transition from ${budget.status} to ${dto.status}`);
+    }
+    const updateData: any = { status: dto.status };
+    if (dto.status === 'Approved') {
+      updateData.approvedBy = dto.approvedBy || userId;
+      updateData.approvalDate = new Date();
+    }
+    const updated = await this.budgetModel.findByIdAndUpdate(id, { $set: updateData }, { new: true }).lean();
+    return { ...updated, id: (updated as any)?._id?.toString() };
   }
 }

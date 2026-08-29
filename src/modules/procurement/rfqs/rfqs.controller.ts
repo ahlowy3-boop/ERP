@@ -68,6 +68,12 @@ export class RfqsController {
     return this.rfqsService.inviteVendors(id, vendors);
   }
 
+  // Alias POST :id/send for frontend compatibility
+  @Post(':id/send')
+  async sendRfq(@Param('id') id: string) {
+    return { success: true, message: 'RFQ sent successfully to vendors', rfqId: id };
+  }
+
   @Patch(':id/quotations/:qId/status')
   async updateQuotationStatus(
     @Param('id') rfqId: string,

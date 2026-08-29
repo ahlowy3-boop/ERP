@@ -44,4 +44,11 @@ export class GlController {
   voidEntry(@Param('id') id: string, @CurrentUser() user: any) {
     return this.glService.voidEntry(id, user._id || user.id);
   }
+
+  @Get('ledger-accounts')
+  @Roles(UserRole.SuperAdmin, UserRole.GeneralManager, UserRole.FinanceManager)
+  @RequirePermissions('view:finance')
+  getLedgerAccounts(@Query() query: any) {
+    return this.glService.getLedgerAccounts(query);
+  }
 }

@@ -266,4 +266,60 @@ export class GlService {
       session.endSession();
     }
   }
+
+  async getLedgerAccounts(query: { accountCode?: string; dateFrom?: string; dateTo?: string; costCenterCode?: string; page?: number; limit?: number }) {
+    const { accountCode, dateFrom, dateTo, costCenterCode, page = 1, limit = 20 } = query;
+    const dateFilter: any = {};
+    if (dateFrom) dateFilter.$gte = new Date(dateFrom);
+    if (dateTo) dateFilter.$lte = new Date(dateTo);
+    const lineFilter: any = {};
+    if (accountCode) lineFilter['lines.accountCode'] = accountCode;
+    if (costCenterCode) lineFilter['lines.costCenterCode'] = costCenterCode;
+    if (Object.keys(dateFilter).length) lineFilter.date = dateFilter;
+    const entries = await this.journalEntryModel.find({ status: 'Posted', ...lineFilter }).sort({ date: -1 }).lean();
+    const accountMap = new Map<string, any>();
+    for (const entry of entries) {
+      for (const line of (entry as any).lines || []) {
+        if (accountCode && line.accountCode !== accountCode) continue;
+        const key = line.accountCode;
+        if (!accountMap.has(key)) {
+          accountMap.set(key, {
+            accountCode: key,
+            accountName: line.accountName,
+            type: '',
+            openingBalance: 0,
+            totalDebit: 0,
+            totalCredit: 0,
+            closingBalance: 0,
+            lines: [],
+          });
+        }
+        const acc = accountMap.get(key);
+        const isDebit = line.type === 'Debit';
+        if (isDebit) acc.totalDebit += line.amount;
+        else acc.totalCredit += line.amount;
+        acc.lines.push({
+          date: (entry as any).date,
+          journalNumber: (entry as any).journalNumber,
+          description: `${(entry as any).description || ''} — ${(entry as any).reference || ''}`.trim(),
+          debit: isDebit ? line.amount : 0,
+          credit: isDebit ? 0 : line.amount,
+          costCenterCode: line.costCenterCode,
+          projectCode: line.projectCode,
+        });
+      }
+    }
+    const result = Array.from(accountMap.values());
+    for (const acc of result) {
+      acc.closingBalance = acc.openingBalance + acc.totalDebit - acc.totalCredit;
+      let running = acc.openingBalance;
+      for (const line of acc.lines) {
+        running += line.debit - line.credit;
+        line.runningBalance = running;
+      }
+    }
+    const total = result.length;
+    const skip = (Number(page) - 1) * Number(limit);
+    return { data: result.slice(skip, skip + Number(limit)), total, page: Number(page) };
+  }
 }

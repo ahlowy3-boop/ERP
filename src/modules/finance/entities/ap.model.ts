@@ -169,3 +169,66 @@ PaymentVoucherSchema.index({ paymentDate: -1 });
 export const PaymentVoucherModel = MongooseModule.forFeature([
   { name: PaymentVoucherModelName, schema: PaymentVoucherSchema },
 ]);
+
+// ──────────────────────────────────────────────────────────────
+// AP SUPPLIER (مورد الحسابات الدائنة)
+// ──────────────────────────────────────────────────────────────
+export const ApSupplierModelName = 'ApSupplier';
+
+@Schema({ timestamps: true, collection: 'ap_suppliers' })
+export class ApSupplier extends Document {
+  @Prop({ required: true, unique: true }) code!: string; // SUP-0001
+  @Prop({ required: true }) nameEn!: string;
+  @Prop({ type: String }) nameAr?: string;
+  @Prop({ type: String, enum: ['Oil & Gas', 'Construction', 'IT', 'Services', 'General'], default: 'General' }) category!: string;
+  @Prop({ type: String }) taxNumber?: string;
+  @Prop({ type: String }) vatNumber?: string;
+  @Prop({ type: String }) commercialReg?: string;
+  @Prop({ required: true }) contactPerson!: string;
+  @Prop({ required: true, unique: true }) contactEmail!: string;
+  @Prop({ type: String }) contactPhone?: string;
+  @Prop({ type: String }) address?: string;
+  @Prop({ type: String, default: 'Net 30' }) paymentTerms!: string;
+  @Prop({ type: String, default: 'SAR' }) currency!: string;
+  @Prop({ type: String }) bankName?: string;
+  @Prop({ type: String }) iban?: string;
+  @Prop({ type: String, enum: ['Active', 'Inactive', 'Blacklisted'], default: 'Active' }) status!: string;
+  @Prop({ type: Number, default: 0 }) totalInvoices!: number;
+  @Prop({ type: Number, default: 0 }) totalPaid!: number;
+  @Prop({ type: Number, default: 0 }) outstanding!: number;
+  @Prop({ type: Number, default: 0, min: 0, max: 5 }) rating!: number;
+  @Prop({ type: Boolean, default: false }) isDeleted!: boolean;
+}
+
+export const ApSupplierSchema = SchemaFactory.createForClass(ApSupplier);
+export const ApSupplierModel = MongooseModule.forFeature([{ name: ApSupplierModelName, schema: ApSupplierSchema }]);
+
+// ──────────────────────────────────────────────────────────────
+// AR CUSTOMER (عميل الحسابات المدينة)
+// ──────────────────────────────────────────────────────────────
+export const ArCustomerModelName = 'ArCustomer';
+
+@Schema({ timestamps: true, collection: 'ar_customers' })
+export class ArCustomer extends Document {
+  @Prop({ required: true, unique: true }) code!: string; // CUS-0001
+  @Prop({ required: true }) nameEn!: string;
+  @Prop({ type: String }) nameAr?: string;
+  @Prop({ type: String }) industry?: string;
+  @Prop({ type: String }) taxNumber?: string;
+  @Prop({ required: true }) contactPerson!: string;
+  @Prop({ required: true, unique: true }) contactEmail!: string;
+  @Prop({ type: String }) contactPhone?: string;
+  @Prop({ type: String }) address?: string;
+  @Prop({ type: String, default: 'Net 30' }) paymentTerms!: string;
+  @Prop({ type: String, default: 'SAR' }) currency!: string;
+  @Prop({ type: Number, default: 0 }) creditLimit!: number;
+  @Prop({ type: String, enum: ['Active', 'Inactive', 'Credit Hold'], default: 'Active' }) status!: string;
+  @Prop({ type: Number, default: 0 }) totalInvoices!: number;
+  @Prop({ type: Number, default: 0 }) totalCollected!: number;
+  @Prop({ type: Number, default: 0 }) outstanding!: number;
+  @Prop({ type: Boolean, default: false }) isDeleted!: boolean;
+}
+
+export const ArCustomerSchema = SchemaFactory.createForClass(ArCustomer);
+export const ArCustomerModel = MongooseModule.forFeature([{ name: ArCustomerModelName, schema: ArCustomerSchema }]);
+

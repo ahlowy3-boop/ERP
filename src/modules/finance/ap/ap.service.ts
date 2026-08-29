@@ -1,7 +1,8 @@
-import { Injectable, NotFoundException, BadRequestException, Logger } from '@nestjs/common';
+import { Injectable, NotFoundException, BadRequestException, ConflictException, Logger } from '@nestjs/common';
 import { InjectModel, InjectConnection } from '@nestjs/mongoose';
 import { Model, Connection } from 'mongoose';
-import { SupplierInvoiceModelName, PaymentVoucherModelName } from '../entities/ap.model';
+import { SupplierInvoiceModelName, PaymentVoucherModelName, ApSupplierModelName } from '../entities/ap.model';
+
 import { JournalEntryModelName } from '../../billing/invoices/entities/billing.model';
 import { BankAccountModelName, CashAccountModelName } from '../entities/cash-bank.model';
 import { ChartOfAccountModelName } from '../entities/coa.model';
@@ -17,8 +18,10 @@ export class ApService {
     @InjectModel(BankAccountModelName) private bankAccountModel: Model<any>,
     @InjectModel(CashAccountModelName) private cashAccountModel: Model<any>,
     @InjectModel(ChartOfAccountModelName) private coaModel: Model<any>,
+    @InjectModel(ApSupplierModelName) private apSupplierModel: Model<any>,
     @InjectConnection() private readonly connection: Connection,
   ) {}
+
 
   private async nextNumber(model: Model<any>, field: string, prefix: string, session?: any): Promise<string> {
     const year = new Date().getFullYear();
@@ -397,4 +400,70 @@ export class ApService {
     this.logger.log(`AP Invoice ${invoice.invoiceNumber} rejected by ${userId}`);
     return { status: 'Rejected', rejectionReason: dto.rejectionReason, data: updated };
   }
+
+  // ─── AP Suppliers ─────────────────────────────────────────────────────────────
+  async findAllSuppliers(query: { status?: string; category?: string; search?: string; slim?: boolean; page?: number; limit?: number }) {
+    const { status, category, search, slim, page = 1, limit = 20 } = query;
+    const filter: any = { isDeleted: false };
+    if (status) filter.status = status;
+    if (category) filter.category = category;
+    if (search) filter.$or = [
+      { nameEn: { $regex: search, $options: 'i' } },
+      { nameAr: { $regex: search, $options: 'i' } },
+      { code: { $regex: search, $options: 'i' } },
+    ];
+    const skip = (Number(page) - 1) * Number(limit);
+    if (slim) {
+      const data = await this.apSupplierModel.find(filter).select('code nameEn nameAr').lean();
+      return { data: data.map(d => ({ ...d, id: (d as any)._id?.toString() })) };
+    }
+    const [data, total] = await Promise.all([
+      this.apSupplierModel.find(filter).sort({ createdAt: -1 }).skip(skip).limit(Number(limit)).lean(),
+      this.apSupplierModel.countDocuments(filter),
+    ]);
+    return { data: data.map(d => ({ ...d, id: (d as any)._id?.toString() })), total, page: Number(page) };
+  }
+
+  async createSupplier(dto: any) {
+    if (dto.contactEmail) {
+      const exists = await this.apSupplierModel.findOne({ contactEmail: dto.contactEmail });
+      if (exists) throw new ConflictException('Email already exists');
+    }
+    const count = await this.apSupplierModel.countDocuments();
+    const code = `SUP-${(count + 1).toString().padStart(4, '0')}`;
+    const supplier = await this.apSupplierModel.create({ ...dto, code });
+    return { ...supplier.toObject(), id: supplier._id?.toString() };
+  }
+
+  async updateSupplier(id: string, dto: any) {
+    const updated = await this.apSupplierModel.findByIdAndUpdate(id, { $set: dto }, { new: true }).lean();
+    if (!updated) throw new NotFoundException('Supplier not found');
+    return { ...updated, id: (updated as any)._id?.toString() };
+  }
+
+  async toggleSupplierStatus(id: string) {
+    const supplier = await this.apSupplierModel.findById(id);
+    if (!supplier) throw new NotFoundException('Supplier not found');
+    const newStatus = supplier.status === 'Active' ? 'Inactive' : 'Active';
+    await this.apSupplierModel.findByIdAndUpdate(id, { $set: { status: newStatus } });
+    return { message: 'Status updated', status: newStatus };
+  }
+
+  // ─── AP Invoice Workflow ───────────────────────────────────────────────────────
+  async submitInvoice(id: string, userId: string) {
+    const inv = await this.supplierInvoiceModel.findById(id);
+    if (!inv) throw new NotFoundException('Invoice not found');
+    if (!['Unpaid', 'Draft'].includes(inv.status)) throw new BadRequestException(`Cannot submit invoice in status: ${inv.status}`);
+    const updated = await this.supplierInvoiceModel.findByIdAndUpdate(id, { $set: { status: 'Pending Review', submittedBy: userId, submittedAt: new Date() } }, { new: true }).lean();
+    return { ...updated, id: (updated as any)?._id?.toString() };
+  }
+
+  async queueForPayment(id: string, userId: string) {
+    const inv = await this.supplierInvoiceModel.findById(id);
+    if (!inv) throw new NotFoundException('Invoice not found');
+    if (inv.status !== 'Approved') throw new BadRequestException(`Invoice must be Approved before queuing for payment. Current: ${inv.status}`);
+    const updated = await this.supplierInvoiceModel.findByIdAndUpdate(id, { $set: { status: 'Ready for Payment', queuedBy: userId, queuedAt: new Date() } }, { new: true }).lean();
+    return { ...updated, id: (updated as any)?._id?.toString() };
+  }
 }
+

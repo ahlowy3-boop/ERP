@@ -56,4 +56,55 @@ export class CashBankController {
   updateBankBalance(@Param('id') id: string, @Body() dto: any) {
     return this.cashBankService.updateBankBalance(id, dto);
   }
+
+  // ─── Treasury Transfers ───────────────────────────────────────────────────
+  @Get('transfers')
+  @Roles(UserRole.SuperAdmin, UserRole.GeneralManager, UserRole.FinanceManager)
+  @RequirePermissions('view:finance')
+  findAllTransfers(@Query() query: any) {
+    return this.cashBankService.findAllTransfers(query);
+  }
+
+  @Post('transfers')
+  @Roles(UserRole.SuperAdmin, UserRole.GeneralManager, UserRole.FinanceManager)
+  @RequirePermissions('edit:finance')
+  createTransfer(@Body() dto: any, @Request() req: any) {
+    return this.cashBankService.createTransfer(dto, req.user?.id);
+  }
+
+  @Patch('transfers/:id/approve')
+  @Roles(UserRole.SuperAdmin, UserRole.GeneralManager, UserRole.FinanceManager)
+  @RequirePermissions('approve:finance')
+  approveTransfer(@Param('id') id: string, @Body() dto: any, @Request() req: any) {
+    return this.cashBankService.approveTransfer(id, dto, req.user?.id);
+  }
+
+  @Post('transfers/:id/execute')
+  @Roles(UserRole.SuperAdmin, UserRole.GeneralManager, UserRole.FinanceManager)
+  @RequirePermissions('approve:finance')
+  executeTransfer(@Param('id') id: string, @Request() req: any) {
+    return this.cashBankService.executeTransfer(id, req.user?.id);
+  }
+
+  @Patch('transfers/:id/cancel')
+  @Roles(UserRole.SuperAdmin, UserRole.GeneralManager, UserRole.FinanceManager)
+  @RequirePermissions('edit:finance')
+  cancelTransfer(@Param('id') id: string) {
+    return this.cashBankService.cancelTransfer(id);
+  }
+
+  // ─── Account Movements ─────────────────────────────────────────────────────
+  @Get('bank-accounts/:id/movements')
+  @Roles(UserRole.SuperAdmin, UserRole.GeneralManager, UserRole.FinanceManager)
+  @RequirePermissions('view:finance')
+  getBankAccountMovements(@Param('id') id: string, @Query() query: any) {
+    return this.cashBankService.getBankAccountMovements(id, query);
+  }
+
+  @Get('cash-accounts/:id/movements')
+  @Roles(UserRole.SuperAdmin, UserRole.GeneralManager, UserRole.FinanceManager)
+  @RequirePermissions('view:finance')
+  getCashAccountMovements(@Param('id') id: string, @Query() query: any) {
+    return this.cashBankService.getCashAccountMovements(id, query);
+  }
 }

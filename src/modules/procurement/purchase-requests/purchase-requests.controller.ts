@@ -35,6 +35,16 @@ export class PurchaseRequestsController {
     );
   }
 
+  // Support frontend PATCH :id/approve with { action: 'approve' | 'reject', comments?: string }
+  @Patch(':id/approve')
+  async approveOrReject(
+    @Param('id') id: string,
+    @Body() body: { action?: string; comments?: string; approverName?: string },
+  ) {
+    const status = body.action === 'reject' ? 'Rejected' : 'Approved';
+    return this.prService.updateStatus(id, status, body.approverName);
+  }
+
   @Delete(':id')
   async remove(@Param('id') id: string) {
     return this.prService.remove(id);

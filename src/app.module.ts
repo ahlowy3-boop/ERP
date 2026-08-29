@@ -57,6 +57,9 @@ import { InvoicesModule } from './modules/billing/invoices/invoices.module';
 // 💰 Finance Module
 import { FinanceModule } from './modules/finance/finance.module';
 
+// 🦺 HSE Module
+import { HseModule } from './modules/hse/hse.module';
+
 @Module({
   imports: [
     // 1. إعدادات متغيرات البيئة
@@ -154,6 +157,9 @@ import { FinanceModule } from './modules/finance/finance.module';
 
     // 11. Finance Module (COA, GL, AP, AR, Cash & Bank, Budget, Depreciation, VAT, Statements)
     FinanceModule,
+
+    // 12. HSE Module (Incidents, PTWs, Inspections, Risk Register)
+    HseModule,
   ],
 
   providers: [

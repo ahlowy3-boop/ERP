@@ -5,6 +5,7 @@ import { SalesInvoiceModelName, JournalEntryModelName } from '../../billing/invo
 import { CollectionVoucherModelName } from '../entities/budget.model';
 import { BankAccountModelName, CashAccountModelName } from '../entities/cash-bank.model';
 import { ChartOfAccountModelName } from '../entities/coa.model';
+import { ArCustomerModelName } from '../entities/ap.model';
 
 @Injectable()
 export class ArService {
@@ -17,6 +18,7 @@ export class ArService {
     @InjectModel(BankAccountModelName) private bankAccountModel: Model<any>,
     @InjectModel(CashAccountModelName) private cashAccountModel: Model<any>,
     @InjectModel(ChartOfAccountModelName) private coaModel: Model<any>,
+    @InjectModel(ArCustomerModelName) private arCustomerModel: Model<any>,
     @InjectConnection() private readonly connection: Connection,
   ) {}
 
@@ -224,5 +226,59 @@ export class ArService {
     } finally {
       session.endSession();
     }
+  }
+
+  // ─── AR Customers ─────────────────────────────────────────────────────────
+  async findAllCustomers(query: { status?: string; search?: string; slim?: boolean; page?: number; limit?: number }) {
+    const { status, search, slim, page = 1, limit = 20 } = query;
+    const filter: any = { isDeleted: false };
+    if (status) filter.status = status;
+    if (search) {
+      filter.$or = [
+        { nameEn: { $regex: search, $options: 'i' } },
+        { nameAr: { $regex: search, $options: 'i' } },
+        { code: { $regex: search, $options: 'i' } },
+      ];
+    }
+    const skip = (Number(page) - 1) * Number(limit);
+    if (slim) {
+      const data = await this.arCustomerModel.find(filter).select('code nameEn nameAr').lean();
+      return { data: data.map(d => ({ ...d, id: (d as any)._id?.toString() })) };
+    }
+    const [data, total] = await Promise.all([
+      this.arCustomerModel.find(filter).sort({ createdAt: -1 }).skip(skip).limit(Number(limit)).lean(),
+      this.arCustomerModel.countDocuments(filter),
+    ]);
+    return { data: data.map(d => ({ ...d, id: (d as any)._id?.toString() })), total, page: Number(page) };
+  }
+
+  async createCustomer(dto: any) {
+    const count = await this.arCustomerModel.countDocuments();
+    const code = `CUS-${(count + 1).toString().padStart(4, '0')}`;
+    const customer = await this.arCustomerModel.create({ ...dto, code });
+    return { ...customer.toObject(), id: customer._id?.toString() };
+  }
+
+  async updateCustomer(id: string, dto: any) {
+    const updated = await this.arCustomerModel.findByIdAndUpdate(id, { $set: dto }, { new: true }).lean();
+    if (!updated) throw new NotFoundException('Customer not found');
+    return { ...updated, id: (updated as any)._id?.toString() };
+  }
+
+  async toggleCustomerStatus(id: string) {
+    const customer = await this.arCustomerModel.findById(id);
+    if (!customer) throw new NotFoundException('Customer not found');
+    const newStatus = customer.status === 'Active' ? 'Inactive' : 'Active';
+    await this.arCustomerModel.findByIdAndUpdate(id, { $set: { status: newStatus } });
+    return { message: 'Status updated', status: newStatus };
+  }
+
+  async updateInvoiceStatus(id: string, dto: { status: string; comments?: string }, userId: string) {
+    const invoice = await this.salesInvoiceModel.findById(id);
+    if (!invoice) throw new NotFoundException('Invoice not found');
+    const allowed = ['Draft', 'Sent', 'Cancelled'];
+    if (!allowed.includes(dto.status)) throw new BadRequestException(`Status must be one of: ${allowed.join(', ')}`);
+    const updated = await this.salesInvoiceModel.findByIdAndUpdate(id, { $set: { status: dto.status, statusComments: dto.comments } }, { new: true }).lean();
+    return { ...updated, id: (updated as any)?._id?.toString() };
   }
 }
