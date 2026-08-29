@@ -69,6 +69,16 @@ export class CreateContractDto {
   @ValidateNested({ each: true })
   @Type(() => MilestoneDto)
   milestones?: MilestoneDto[];
+
+  // Extended fields sent by frontend
+  @IsOptional() @IsNumber() @Min(0) @Type(() => Number) contractValueEGP?: number;
+  @IsOptional() @IsDateString() rateSnapshotDate?: string;
+  @IsOptional() @IsString() contractNumber?: string;
+  @IsOptional() @IsString() projectCode?: string;
+  @IsOptional() @IsString() projectId?: string;
+  @IsOptional() @IsString() costCenterCode?: string;
+  @IsOptional() @IsString() notes?: string;
+  @IsOptional() @IsString() status?: string;
 }
 
 export class UpdateContractStatusDto {

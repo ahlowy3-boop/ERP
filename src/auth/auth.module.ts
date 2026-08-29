@@ -25,7 +25,10 @@ import { PasswordResetTokenModel } from 'src/modules/admin/users/entities/passwo
       imports: [ConfigModule],
       inject: [ConfigService],
       useFactory: (config: ConfigService) => ({
-        secret: config.get<string>('JWT_SECRET'),
+        secret:
+          config.get<string>('JWT_SECRET') ||
+          process.env.JWT_SECRET ||
+          'SUlsWrJxCtmNwevnopmfPigA21Wcskdg',
         signOptions: { expiresIn: '1h' },
       }),
     }),
