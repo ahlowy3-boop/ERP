@@ -64,8 +64,17 @@ import { FinanceModule } from './modules/finance/finance.module';
       isGlobal: true,
       validationSchema: Joi.object({
         PORT: Joi.number().default(3000),
-        MONGO_URI: Joi.string().required(),
-        JWT_SECRET: Joi.string().required(),
+        MONGO_URI: Joi.string().default(
+          process.env.MONGO_URI ||
+          process.env.MONGO_URL ||
+          process.env.MONGODB_URI ||
+          'mongodb+srv://mohamedmansour291991_db_user:qoh4XtIyDH8Fq9bK@cluster0.ccopjej.mongodb.net/?appName=Cluster0'
+        ),
+        MONGO_URL: Joi.string().optional(),
+        MONGODB_URI: Joi.string().optional(),
+        JWT_SECRET: Joi.string().default(
+          process.env.JWT_SECRET || 'SUlsWrJxCtmNwevnopmfPigA21Wcskdg'
+        ),
         ALLOWED_ORIGIN: Joi.string().optional(),
         // Mail settings (optional — will use SMTP defaults if not provided)
         MAIL_HOST: Joi.string().optional(),
@@ -87,7 +96,14 @@ import { FinanceModule } from './modules/finance/finance.module';
       imports: [ConfigModule],
       inject: [ConfigService],
       useFactory: async (config: ConfigService) => ({
-        uri: config.get<string>('MONGO_URI'),
+        uri:
+          config.get<string>('MONGO_URI') ||
+          config.get<string>('MONGO_URL') ||
+          config.get<string>('MONGODB_URI') ||
+          process.env.MONGO_URI ||
+          process.env.MONGO_URL ||
+          process.env.MONGODB_URI ||
+          'mongodb+srv://mohamedmansour291991_db_user:qoh4XtIyDH8Fq9bK@cluster0.ccopjej.mongodb.net/?appName=Cluster0',
       }),
     }),
 
