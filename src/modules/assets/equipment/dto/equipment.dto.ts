@@ -75,6 +75,22 @@ export class CreateEquipmentDto {
 
   @IsOptional()
   @IsString()
+  costCenterCode?: string;
+
+  @IsOptional()
+  @IsString()
+  costCenterName?: string;
+
+  @IsOptional()
+  @IsString()
+  parentCostCenter?: string;
+
+  @IsOptional()
+  @IsString()
+  parentCostCenterCode?: string;
+
+  @IsOptional()
+  @IsString()
   department?: string;
 
   @IsOptional()

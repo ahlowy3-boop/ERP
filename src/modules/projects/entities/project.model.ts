@@ -29,6 +29,15 @@ export class Project extends Document {
   @Prop({ type: String, default: null })
   costCenterCode?: string;
 
+  @Prop({ type: String, default: null })
+  costCenterName?: string;
+
+  @Prop({ type: String, default: null })
+  parentCostCenter?: string;
+
+  @Prop({ type: String, default: null })
+  parentCostCenterCode?: string;
+
   // Client
   @Prop({ type: String, default: '' })
   customer!: string;

@@ -2,6 +2,7 @@ import { Injectable, NotFoundException, Logger } from '@nestjs/common';
 import { InjectModel } from '@nestjs/mongoose';
 import { Model } from 'mongoose';
 import { ProjectModelName } from './entities/project.model';
+import { CostCentersService } from '../cost-centers/cost-centers.service';
 
 @Injectable()
 export class ProjectsService {
@@ -9,6 +10,7 @@ export class ProjectsService {
 
   constructor(
     @InjectModel(ProjectModelName) private projectModel: Model<any>,
+    private readonly costCentersService: CostCentersService,
   ) {}
 
   // ─── Get All ───────────────────────────────────────────────────────────────
@@ -122,6 +124,19 @@ export class ProjectsService {
       code,
       createdBy: userId,
     });
+
+    // Auto-create Cost Center for Project
+    try {
+      const cc = await this.costCentersService.autoCreateForProject(project, userId);
+      if (cc) {
+        project.costCenterCode = cc.code;
+        project.costCenterId = cc._id;
+        await project.save();
+      }
+    } catch (err: any) {
+      this.logger.warn(`Failed to auto-create cost center for project ${code}: ${err.message}`);
+    }
+
     this.logger.log(`Project ${code} created manually by ${userId}`);
     return project;
   }

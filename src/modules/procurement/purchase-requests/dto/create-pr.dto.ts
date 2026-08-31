@@ -37,6 +37,10 @@ export class CreatePurchaseRequestItemDto {
 export class CreatePurchaseRequestDto {
   @IsString() @IsNotEmpty() department!: string;
   @IsString() @IsNotEmpty() costCenter!: string;
+  @IsOptional() @IsString() costCenterCode?: string;
+  @IsOptional() @IsString() costCenterName?: string;
+  @IsOptional() @IsString() parentCostCenter?: string;
+  @IsOptional() @IsString() parentCostCenterCode?: string;
   @IsString() @IsNotEmpty() chargeType!: string;
 
   @IsOptional() @IsString() projectId?: string;

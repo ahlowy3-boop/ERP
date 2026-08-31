@@ -206,17 +206,28 @@ export class ContractsService {
 
     try {
       // 1. Create Cost Center
+      const parentCode = contract.parentCostCenter || 'CC-PRJ-000';
       const [ccDoc] = await this.ccModel.create(
         [
           {
             code: ccCode,
             name: `CC ${contract.title}`,
+            nameEn: contract.title,
+            nameAr: contract.title,
             type: 'Project',
-            parentCode: 'CC-DRILL-01',
+            parentCode,
+            level: 3,
+            branch: 'HeadOffice',
+            status: 'Active',
             contractId: contract._id,
             contractNumber: contract.contractNumber,
             projectCode,
             isActive: true,
+            sourceType: 'Project',
+            sourceId: contract._id,
+            sourceCode: projectCode,
+            autoCreated: true,
+            budgetAmount: contract.value || 0,
             createdBy: new Types.ObjectId(userId),
           },
         ],
