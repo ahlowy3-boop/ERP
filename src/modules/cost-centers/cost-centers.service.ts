@@ -104,38 +104,43 @@ export class CostCentersService {
   }
 
   async create(dto: any, userId: string) {
+    const parentCode = dto.parentCode || dto.parentCostCenter;
     const exists = await this.ccModel.findOne({ code: dto.code });
     if (exists) throw new ConflictException(`Cost center code "${dto.code}" already exists`);
 
     // Validate no circular parent
-    if (dto.parentCode) {
-      const parent = await this.ccModel.findOne({ code: dto.parentCode });
-      if (!parent) throw new BadRequestException(`Parent code "${dto.parentCode}" not found`);
+    if (parentCode) {
+      const parent = await this.ccModel.findOne({ code: parentCode });
+      if (!parent) throw new BadRequestException(`Parent code "${parentCode}" not found`);
     }
 
     const isActive = dto.status ? dto.status === 'Active' : true;
-    return this.ccModel.create({ ...dto, isActive, createdBy: userId });
+    return this.ccModel.create({ ...dto, parentCode, isActive, createdBy: userId });
   }
 
   async updateByCode(code: string, dto: any) {
     const cc = await this.ccModel.findOne({ code });
     if (!cc) throw new NotFoundException(`Cost center "${code}" not found`);
 
+    const parentCode = dto.parentCode || dto.parentCostCenter;
+
     // Circular reference check
-    if (dto.parentCode) {
-      if (dto.parentCode === code) throw new BadRequestException('A cost center cannot be its own parent');
-      let parentCode = dto.parentCode;
+    if (parentCode) {
+      if (parentCode === code) throw new BadRequestException('A cost center cannot be its own parent');
+      let currentParent = parentCode;
       for (let i = 0; i < 10; i++) {
-        const parent = await this.ccModel.findOne({ code: parentCode }).lean();
+        const parent = await this.ccModel.findOne({ code: currentParent }).lean();
         if (!parent) break;
         if (parent.parentCode === code) throw new BadRequestException('Circular parent-child reference detected');
-        parentCode = parent.parentCode;
-        if (!parentCode) break;
+        currentParent = parent.parentCode;
+        if (!currentParent) break;
       }
     }
 
-    if (dto.status !== undefined) dto.isActive = dto.status === 'Active';
-    const updated = await this.ccModel.findOneAndUpdate({ code }, { $set: dto }, { new: true }).lean();
+    const payload = { ...dto };
+    if (parentCode) payload.parentCode = parentCode;
+    if (dto.status !== undefined) payload.isActive = dto.status === 'Active';
+    const updated = await this.ccModel.findOneAndUpdate({ code }, { $set: payload }, { new: true }).lean();
     return updated;
   }
 

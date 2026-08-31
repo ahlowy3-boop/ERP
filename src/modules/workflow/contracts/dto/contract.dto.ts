@@ -77,6 +77,7 @@ export class CreateContractDto {
   @IsOptional() @IsString() projectCode?: string;
   @IsOptional() @IsString() projectId?: string;
   @IsOptional() @IsString() costCenterCode?: string;
+  @IsOptional() @IsString() parentCostCenter?: string;
   @IsOptional() @IsString() notes?: string;
   @IsOptional() @IsString() status?: string;
 }

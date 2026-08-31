@@ -44,9 +44,10 @@ async function bootstrap() {
   //3. تفعيل جدار الحماية للبيانات (Validation Pipe) عالمياً باستخدام الـ DTOs
   app.useGlobalPipes(
     new ValidationPipe({
-      whitelist: true, // يزيل أي حقول غير مسجلة في الـ DTO
-      forbidNonWhitelisted: true, // يرفض الطلب إذا احتوى حقولاً غريبة
+      whitelist: true, // يزيل بأمان أي حقول غير مسجلة في الـ DTO
+      forbidNonWhitelisted: false, // لا يرفض الطلب في حال وجود حقول إضافية من الفرونت إند
       transform: true, // يحول القيم للأنواع الصحيحة (مثل تحويل النصوص لأرقام)
+      transformOptions: { enableImplicitConversion: true },
     }),
   );
 
