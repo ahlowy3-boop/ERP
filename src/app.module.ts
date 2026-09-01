@@ -26,6 +26,12 @@ import { PurchaseRequestsModule } from './modules/procurement/purchase-requests/
 import { PurchaseOrdersModule } from './modules/procurement/purchase-orders/purchase-orders.module';
 import { VendorsModule } from './modules/vendors/vendors.module';
 import { MrvsModule } from './modules/inventory/mrvs/mrvs.module';
+import { MivsModule } from './modules/inventory/mivs/mivs.module';
+import { WarehousesModule } from './modules/inventory/warehouses/warehouses.module';
+import { ItemsModule } from './modules/inventory/items/items.module';
+import { AdjustmentsModule } from './modules/inventory/adjustments/adjustments.module';
+import { CountsModule } from './modules/inventory/counts/counts.module';
+import { TransfersModule } from './modules/inventory/transfers/transfers.module';
 import { ReportsModule as InventoryReportsModule } from './modules/inventory/reports/reports.module';
 import { InventoryAliasModule } from './modules/inventory/inventory-alias.module';
 
@@ -127,7 +133,15 @@ import { HseModule } from './modules/hse/hse.module';
     PurchaseRequestsModule,
     PurchaseOrdersModule,
     VendorsModule,
+    // Inventory Module (complete)
+    WarehousesModule,
+    ItemsModule,
     MrvsModule,
+    MivsModule,
+    AdjustmentsModule,
+    CountsModule,
+    TransfersModule,
+    InventoryReportsModule,
     InventoryAliasModule,
 
     // 8. Phase 1 — Master Assets, Contracts, Projects, Cost Centers

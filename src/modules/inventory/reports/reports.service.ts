@@ -11,25 +11,25 @@ export class ReportsService {
 
   // 1. لوحة تحكم المخزون (KPIs)
   async getSummary() {
-    // 💡 يمكن استبدال هذه بـ Aggregation Query واحدة للحصول على أداء أفضل
     const items = await this._InventoryItemRepository.findAll({
       paginate: { limit: 100000 },
-    }); // للحصر المبدئي
-    const data = items || [];
+    });
+    const data = (items as any[]) || [];
 
     const totalItems = data.length;
     const totalValue = data.reduce(
-      (acc, item) => acc + item.quantity * item.unitPrice,
+      (acc: number, item: any) => acc + (item.quantity || 0) * (item.unitPrice || 0),
       0,
     );
     const lowStockCount = data.filter(
-      (item) => item.status === 'Low Stock',
+      (item: any) => item.status === 'Low Stock',
     ).length;
     const outOfStockCount = data.filter(
-      (item) => item.status === 'Out of Stock',
+      (item: any) => item.status === 'Out of Stock',
     ).length;
 
     return {
+      success: true,
       data: {
         totalItems,
         totalValue,

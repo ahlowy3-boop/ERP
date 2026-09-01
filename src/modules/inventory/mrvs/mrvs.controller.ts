@@ -47,6 +47,10 @@ export class MrvsController {
     @Body() updateMrvDto: any,
     @CurrentUser('id') userId: string,
   ) {
+    // Support: PATCH /mrvs/:id with { status: "Posted" } → approve and post inventory
+    if (updateMrvDto.status === 'Posted' || updateMrvDto.status === 'Approved') {
+      return this.mrvsService.approve(id, userId);
+    }
     return this.mrvsService.update(id, updateMrvDto, userId);
   }
 

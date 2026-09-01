@@ -71,16 +71,21 @@ export class ItemsService {
     if (!item)
       throw new NotFoundException(`Item with code ${itemCode} not found`);
 
-    const reservedQty = (item as any).reservedQuantity || 0;
-    const availableQty = item.quantity - reservedQty;
+    const reserved = (item as any).reservedQuantity || 0;
+    const netAvailable = item.quantity - reserved;
 
     return {
-      itemCode: item.itemCode,
-      itemName: item.itemName,
-      currentStock: item.quantity,
-      reservedQty,
-      availableQty,
-      status: item.status,
+      success: true,
+      data: {
+        itemCode: item.itemCode,
+        itemName: item.itemName,
+        totalAvailable: item.quantity,
+        reserved,
+        netAvailable,
+        status: item.status,
+        // warehouses breakdown — populated when warehouse-level tracking is enabled
+        warehouses: (item as any).warehouseStock || [],
+      },
     };
   }
 

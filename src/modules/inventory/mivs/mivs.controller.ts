@@ -46,6 +46,10 @@ export class MivsController {
     @Body() updateMivDto: any,
     @CurrentUser('id') userId: string,
   ) {
+    // Support: PATCH /mivs/:id with { status: "Posted" } → approve and deduct inventory
+    if (updateMivDto.status === 'Posted' || updateMivDto.status === 'Approved') {
+      return this.mivsService.approve(id, userId);
+    }
     return this.mivsService.update(id, updateMivDto, userId);
   }
 
