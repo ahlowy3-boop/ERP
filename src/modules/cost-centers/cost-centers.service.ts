@@ -153,13 +153,18 @@ export class CostCentersService {
       };
     }
 
+    const isTreeMode = !parentCode && !search && !type;
     const skip = (Number(page) - 1) * Number(limit);
+
+    // In tree mode, fetch ALL items (no pagination) so children aren't cut off by the limit
     const [rawItems, totalItems] = await Promise.all([
-      this.ccModel.find(filter).sort({ level: 1, code: 1 }).skip(skip).limit(Number(limit)).lean(),
+      isTreeMode
+        ? this.ccModel.find(filter).sort({ level: 1, code: 1 }).lean()
+        : this.ccModel.find(filter).sort({ level: 1, code: 1 }).skip(skip).limit(Number(limit)).lean(),
       this.ccModel.countDocuments(filter),
     ]);
 
-    // Count children for all items
+    // Count children for all items dynamically from DB
     const allCounts = await this.ccModel.aggregate([
       { $match: { parentCode: { $ne: null } } },
       { $group: { _id: '$parentCode', count: { $sum: 1 } } },
@@ -184,9 +189,9 @@ export class CostCentersService {
       }),
     );
 
-    // If query has no specific parentCode filter and search is empty, build tree
+    // Build hierarchical tree
     let dataResult = enriched;
-    if (!parentCode && !search && !type) {
+    if (isTreeMode) {
       const itemMap = new Map<string, any>();
       for (const item of enriched) {
         item.children = [];
@@ -680,29 +685,56 @@ export class CostCentersService {
     const existing = await this.ccModel.findOne({ sourceId: project._id });
     if (existing) return existing;
 
-    const count = await this.ccModel.countDocuments({ code: { $regex: /^CC-PRJ-/ } });
-    const code = `CC-PRJ-${(count + 1).toString().padStart(3, '0')}`;
+    // ─── Resolve parent cost center ──────────────────────────────────────────
+    // Priority: project.parentCostCenterCode > project.parentCostCenter
+    //         > project.costCenterCode > 'CC-PRJ-000'
+    const parentCode =
+      project.parentCostCenterCode ||
+      project.parentCostCenter ||
+      project.costCenterCode ||
+      'CC-PRJ-000';
+
+    // Lookup the parent document to get its _id and level
+    const parentCCDoc = await this.ccModel.findOne({ code: parentCode }).lean();
+    const parentId = parentCCDoc ? (parentCCDoc as any)._id : null;
+    const level = parentCCDoc ? ((parentCCDoc as any).level || 1) + 1 : 2;
+    const branch = (parentCCDoc as any)?.branch || 'HeadOffice';
+
+    // ─── Generate unique code for this project's CC ──────────────────────────
+    // If a projectCode exists, use it directly as the CC code to ensure uniqueness
+    const projectCode = project.code || project.projectCode;
+    const code = projectCode
+      ? `CC-${projectCode}`
+      : `CC-PRJ-${((await this.ccModel.countDocuments({ code: { $regex: /^CC-PRJ-/ } })) + 1).toString().padStart(3, '0')}`;
 
     const cc = await this.ccModel.create({
       code,
-      nameEn: project.name || project.projectName || `Project ${project.code}`,
-      nameAr: project.nameAr || project.projectNameAr || project.name || `مشروع ${project.code}`,
+      nameEn: project.name || project.projectName || `Project ${projectCode}`,
+      nameAr: project.nameAr || project.projectNameAr || project.name || `مشروع ${projectCode}`,
       name: project.name,
       type: 'Project',
-      parentCode: 'CC-PRJ-000',
-      level: 3,
-      branch: 'HeadOffice',
+      parentCode,
+      parentId,
+      level,
+      branch,
       status: 'Active',
       isActive: true,
       sourceType: 'Project',
       sourceId: project._id,
-      sourceCode: project.code || project.projectCode,
+      sourceCode: projectCode,
       autoCreated: true,
       budgetAmount: project.budgetValue || project.budget || 0,
       createdBy: userId,
     });
 
-    this.logger.log(`Auto-created Cost Center ${code} for Project ${project.code}`);
+    // ─── Increment parent's childrenCount ────────────────────────────────────
+    if (parentId) {
+      await this.ccModel.findByIdAndUpdate(parentId, { $inc: { childrenCount: 1 } });
+    }
+
+    this.logger.log(
+      `Auto-created Cost Center ${code} for Project ${projectCode} under parent ${parentCode}`,
+    );
     return cc;
   }
 

@@ -119,13 +119,19 @@ export class ProjectsService {
     if (existing) {
       throw new Error(`Project with code "${code}" already exists`);
     }
+
+    // Persist parentCostCenter fields so autoCreateForProject can read them
     const project = await this.projectModel.create({
       ...dto,
       code,
+      // Normalise aliases sent by frontend
+      parentCostCenter: dto.parentCostCenterCode || dto.parentCostCenter || null,
+      parentCostCenterCode: dto.parentCostCenterCode || dto.parentCostCenter || null,
+      costCenterCode: dto.costCenterCode || null,
       createdBy: userId,
     });
 
-    // Auto-create Cost Center for Project
+    // Auto-create Cost Center for Project (uses project.parentCostCenterCode / costCenterCode)
     try {
       const cc = await this.costCentersService.autoCreateForProject(project, userId);
       if (cc) {

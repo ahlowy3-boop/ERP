@@ -205,8 +205,22 @@ export class ContractsService {
     session.startTransaction();
 
     try {
-      // 1. Create Cost Center
-      const parentCode = contract.parentCostCenter || 'CC-PRJ-000';
+      // 1. Resolve parent cost center
+      // Priority: parentCostCenterCode > parentCostCenter > costCenterCode > 'CC-PRJ-000'
+      const parentCode =
+        contract.parentCostCenterCode ||
+        contract.parentCostCenter ||
+        contract.costCenterCode ||
+        'CC-PRJ-000';
+
+      // Resolve parentId and compute level from the actual parent document
+      const parentCCDoc = await this.ccModel
+        .findOne({ code: parentCode })
+        .session(session)
+        .lean();
+      const parentId = parentCCDoc ? parentCCDoc._id : null;
+      const level = parentCCDoc ? ((parentCCDoc as any).level || 1) + 1 : 2;
+
       const [ccDoc] = await this.ccModel.create(
         [
           {
@@ -216,8 +230,9 @@ export class ContractsService {
             nameAr: contract.title,
             type: 'Project',
             parentCode,
-            level: 3,
-            branch: 'HeadOffice',
+            parentId,
+            level,
+            branch: contract.branch || parentCCDoc?.['branch'] || 'HeadOffice',
             status: 'Active',
             contractId: contract._id,
             contractNumber: contract.contractNumber,
@@ -233,6 +248,15 @@ export class ContractsService {
         ],
         { session },
       );
+
+      // Increment parent's childrenCount
+      if (parentId) {
+        await this.ccModel.updateOne(
+          { _id: parentId },
+          { $inc: { childrenCount: 1 } },
+          { session },
+        );
+      }
 
       // 2. Create Project
       const [projectDoc] = await this.projectModel.create(
