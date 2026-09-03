@@ -26,10 +26,11 @@ export class EquipmentService {
     search?: string;
     category?: string;
     status?: string;
+    unassignedOnly?: boolean | string;
     page?: number;
     limit?: number;
   }) {
-    const { search, category, status, page = 1, limit = 20 } = query;
+    const { search, category, status, unassignedOnly, page = 1, limit = 20 } = query;
     const filter: any = {};
 
     if (search) {
@@ -44,6 +45,16 @@ export class EquipmentService {
     if (category) filter.category = category;
     if (status) filter.status = status;
 
+    // Filter: only unassigned (not linked to an active project/contract)
+    if (unassignedOnly === true || unassignedOnly === 'true') {
+      filter.$or = [
+        ...(filter.$or || []),
+        // currentProjectId absent or null
+      ];
+      filter.currentProjectId = { $in: [null, undefined] };
+      filter.assignedContractId = { $in: [null, undefined] };
+    }
+
     const skip = (Number(page) - 1) * Number(limit);
     const [items, totalItems] = await Promise.all([
       this.equipmentModel
@@ -57,6 +68,8 @@ export class EquipmentService {
     ]);
 
     return {
+      success: true,
+      data: items,
       items,
       totalItems,
       currentPage: Number(page),

@@ -42,14 +42,22 @@ export class DARService {
       this.darModel.find(filter).sort({ reportDate: -1 }).skip(skip).limit(Number(limit)).lean(),
       this.darModel.countDocuments(filter),
     ]);
-    return { items, totalItems, currentPage: Number(page), totalPages: Math.ceil(totalItems / Number(limit)) };
+    return {
+      success: true,
+      message: 'DARs fetched successfully',
+      data: items,
+      items,
+      totalItems,
+      currentPage: Number(page),
+      totalPages: Math.ceil(totalItems / Number(limit)),
+    };
   }
 
   // ─── Get One ──────────────────────────────────────────────────────────────
   async findOne(id: string) {
     const dar = await this.darModel.findById(id).lean();
     if (!dar) throw new NotFoundException('DAR not found');
-    return dar;
+    return { success: true, data: dar };
   }
 
   // ─── Create ───────────────────────────────────────────────────────────────
@@ -103,7 +111,11 @@ export class DARService {
     });
 
     this.logger.log(`DAR created: ${(contract as any).contractNumber} — ${dto.reportDate}`);
-    return dar;
+    return {
+      success: true,
+      message: 'DAR created successfully',
+      data: dar,
+    };
   }
 
   // ─── Submit ───────────────────────────────────────────────────────────────
@@ -120,7 +132,7 @@ export class DARService {
     ).lean();
 
     this.logger.log(`DAR submitted: ${id} by ${userId}`);
-    return updated;
+    return { success: true, message: 'DAR submitted for approval', data: updated };
   }
 
   // ─── Approve ──────────────────────────────────────────────────────────────
@@ -144,7 +156,7 @@ export class DARService {
     ).lean();
 
     this.logger.log(`DAR approved: ${id} by ${userId}`);
-    return updated;
+    return { success: true, message: 'DAR approved successfully', data: updated };
   }
 
   // ─── Reject ───────────────────────────────────────────────────────────────
@@ -152,10 +164,11 @@ export class DARService {
     const dar = await this.darModel.findById(id);
     if (!dar) throw new NotFoundException('DAR not found');
 
-    return this.darModel.findByIdAndUpdate(
+    const updated = await this.darModel.findByIdAndUpdate(
       id,
       { $set: { status: 'Rejected', rejectionReason: reason, approvedBy: new Types.ObjectId(userId), approvedAt: new Date() } },
       { new: true },
     ).lean();
+    return { success: true, message: 'DAR rejected', data: updated };
   }
 }

@@ -23,10 +23,11 @@ export class EquipmentController {
     @Query('search') search?: string,
     @Query('category') category?: string,
     @Query('status') status?: string,
+    @Query('unassignedOnly') unassignedOnly?: string,
     @Query('page') page?: number,
     @Query('limit') limit?: number,
   ) {
-    return this.equipmentService.findAll({ search, category, status, page, limit });
+    return this.equipmentService.findAll({ search, category, status, unassignedOnly, page, limit });
   }
 
   // GET /api/v1/assets/equipment/stats

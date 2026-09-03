@@ -22,7 +22,20 @@ export class TimesheetsService {
     const filter: any = { category: 'Rig' };
     if (query.status) filter.status = query.status;
     if (query.projectCode) filter.projectAssignment = query.projectCode;
-    return this.equipmentModel.find(filter).sort({ createdAt: -1 }).lean();
+
+    // When fetching Available rigs: exclude those already assigned to an active project/contract
+    if (query.status === 'Available') {
+      filter.$and = [
+        { $or: [{ currentProjectId: null }, { currentProjectId: { $exists: false } }] },
+        { $or: [{ assignedContractId: null }, { assignedContractId: { $exists: false } }] },
+      ];
+    }
+
+    const rigs = await this.equipmentModel.find(filter).sort({ createdAt: -1 }).lean();
+    return {
+      success: true,
+      data: rigs,
+    };
   }
 
   async updateRigStatus(id: string, status: string, userId: string) {
@@ -46,14 +59,21 @@ export class TimesheetsService {
       this.timesheetModel.find(filter).sort({ month: -1 }).skip(skip).limit(Number(limit)).lean(),
       this.timesheetModel.countDocuments(filter),
     ]);
-    return { items, totalItems, currentPage: Number(page), totalPages: Math.ceil(totalItems / Number(limit)) };
+    return {
+      success: true,
+      data: items,
+      items,
+      totalItems,
+      currentPage: Number(page),
+      totalPages: Math.ceil(totalItems / Number(limit)),
+    };
   }
 
   // ─── Get One ──────────────────────────────────────────────────────────────
   async findOne(id: string) {
     const ts = await this.timesheetModel.findById(id).lean();
     if (!ts) throw new NotFoundException('Timesheet not found');
-    return ts;
+    return { success: true, data: ts };
   }
 
   // ─── Create Timesheet for a Month ─────────────────────────────────────────
