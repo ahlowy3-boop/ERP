@@ -9,6 +9,12 @@ import {
 import { WCCModelName } from '../wcc/entities/wcc.model';
 import { ContractModelName } from '../../workflow/contracts/entities/contract.model';
 
+// Guard: only convert strings that are valid 24-hex ObjectIds
+const toObjId = (v?: string) =>
+  v && v !== 'undefined' && v !== 'null' && Types.ObjectId.isValid(v)
+    ? new Types.ObjectId(v)
+    : null;
+
 // Chart of Accounts constants
 const ACCOUNTS = {
   AR:              { code: '211000', name: 'Accounts Receivable' },
@@ -129,6 +135,10 @@ export class InvoicesService {
   async createFromWCC(dto: {
     wccId: string; vatPercent?: number; withholdingTaxPercent?: number; dueDate: string;
   }, userId: string) {
+    // Guard against non-ObjectId values (e.g. "undefined", empty string)
+    if (!toObjId(dto.wccId)) {
+      throw new BadRequestException(`Invalid wccId: "${dto.wccId}"`);
+    }
     const wcc = await this.wccModel.findById(dto.wccId).lean();
     if (!wcc) throw new NotFoundException(`WCC "${dto.wccId}" not found`);
     if ((wcc as any).status !== 'Approved') {
@@ -162,6 +172,13 @@ export class InvoicesService {
       const invoiceNumber = await this.nextNumber(this.invoiceModel, 'invoiceNumber', 'INV', session);
 
       // 1. Build GL lines
+      // DR: A/R (net + retention + withholding)  CR: Revenue + VAT
+      // To balance: total debit must equal total credit
+      // totalDebit = netPayable + retentionAmount + withholdingTaxAmount
+      // totalCredit = subtotal + vatAmount
+      // Note: netPayable = subtotal + vatAmount - retentionAmount - withholdingTaxAmount
+      // => totalDebit = (subtotal + vatAmount - retentionAmount - withholdingTaxAmount) + retentionAmount + withholdingTaxAmount
+      //              = subtotal + vatAmount = totalCredit ✓
       const glLines = [
         { accountCode: ACCOUNTS.AR.code,              accountName: ACCOUNTS.AR.name,              type: 'Debit',  amount: netPayable,           costCenterCode: ccCode },
         { accountCode: ACCOUNTS.RETENTION_RCV.code,   accountName: ACCOUNTS.RETENTION_RCV.name,   type: 'Debit',  amount: retentionAmount,       costCenterCode: ccCode },
@@ -169,6 +186,8 @@ export class InvoicesService {
         { accountCode: ACCOUNTS.REVENUE.code,         accountName: ACCOUNTS.REVENUE.name,         type: 'Credit', amount: subtotal,              costCenterCode: ccCode },
         { accountCode: ACCOUNTS.VAT_PAYABLE.code,     accountName: ACCOUNTS.VAT_PAYABLE.name,     type: 'Credit', amount: vatAmount,             costCenterCode: ccCode },
       ];
+      const glTotalDebit  = +((netPayable + retentionAmount + withholdingTaxAmount)).toFixed(2);
+      const glTotalCredit = +((subtotal + vatAmount)).toFixed(2);
 
       // 2. Create GL entry (inside transaction)
       const [glEntry] = await this.jeModel.create(
@@ -179,8 +198,8 @@ export class InvoicesService {
           reference: invoiceNumber,
           sourceType: 'Invoice',
           lines: glLines,
-          totalDebit:  +(netPayable + retentionAmount + withholdingTaxAmount).toFixed(2),
-          totalCredit: +(subtotal + vatAmount).toFixed(2),
+          totalDebit:  glTotalDebit,
+          totalCredit: glTotalCredit,
           status: 'Posted',
           createdBy: new Types.ObjectId(userId),
         }],
@@ -223,7 +242,13 @@ export class InvoicesService {
       await session.commitTransaction();
 
       this.logger.log(`✅ Invoice ${invoiceNumber} created from WCC ${(wcc as any).wccNumber}. Net: $${netPayable}. GL: ${glEntry.entryNumber}`);
-      return { invoice, glEntry };
+      return {
+        success: true,
+        message: 'Invoice created and GL posted',
+        data: { invoice, glEntry },
+        invoice,
+        glEntry,
+      };
     } catch (err) {
       await session.abortTransaction();
       throw err;

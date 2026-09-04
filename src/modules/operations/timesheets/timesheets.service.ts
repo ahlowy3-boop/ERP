@@ -176,15 +176,18 @@ export class TimesheetsService {
 
   // ─── Submit / Approve ─────────────────────────────────────────────────────
   async updateStatus(id: string, status: string, userId: string) {
+    if (!Types.ObjectId.isValid(id)) {
+      throw new BadRequestException(`Invalid timesheet id: "${id}"`);
+    }
+    const setFields: any = { status };
+    if (status === 'Approved' && userId && Types.ObjectId.isValid(userId)) {
+      setFields.approvedBy = new Types.ObjectId(userId);
+      setFields.approvedAt = new Date();
+    }
     const ts = await this.timesheetModel.findByIdAndUpdate(
-      id, {
-        $set: {
-          status,
-          ...(status === 'Approved' ? { approvedBy: new Types.ObjectId(userId), approvedAt: new Date() } : {}),
-        },
-      }, { new: true },
+      id, { $set: setFields }, { new: true },
     ).lean();
     if (!ts) throw new NotFoundException('Timesheet not found');
-    return ts;
+    return { success: true, message: `Timesheet status updated to ${status}`, data: ts };
   }
 }

@@ -7,6 +7,12 @@ import { WCCModelName } from './entities/wcc.model';
 import { DARModelName } from '../dar/entities/dar.model';
 import { ContractModelName } from '../../workflow/contracts/entities/contract.model';
 
+// Guard: only convert strings that are valid 24-hex ObjectIds
+const toObjId = (v?: string) =>
+  v && v !== 'undefined' && v !== 'null' && Types.ObjectId.isValid(v)
+    ? new Types.ObjectId(v)
+    : null;
+
 @Injectable()
 export class WCCService {
   private readonly logger = new Logger(WCCService.name);
@@ -32,28 +38,46 @@ export class WCCService {
     return `${prefix}${String(seq).padStart(3, '0')}`;
   }
 
-  // ─── Get All ───────────────────────────────────────────────────────────────
+  // ─── Get All ──────────────────────────────────────────────────────────────
   async findAll(query: { contractId?: string; status?: string; page?: number; limit?: number }) {
     const { contractId, status, page = 1, limit = 20 } = query;
     const filter: any = {};
-    if (contractId) filter.contractId = new Types.ObjectId(contractId);
-    if (status)     filter.status     = status;
+    const cid = toObjId(contractId);
+    if (cid)    filter.contractId = cid;
+    if (status) filter.status     = status;
     const skip = (Number(page) - 1) * Number(limit);
     const [items, totalItems] = await Promise.all([
       this.wccModel.find(filter).sort({ createdAt: -1 }).skip(skip).limit(Number(limit)).lean(),
       this.wccModel.countDocuments(filter),
     ]);
-    return { items, totalItems, currentPage: Number(page), totalPages: Math.ceil(totalItems / Number(limit)) };
+    return {
+      success: true,
+      data: items,
+      items,
+      totalItems,
+      currentPage: Number(page),
+      totalPages: Math.ceil(totalItems / Number(limit)),
+    };
   }
 
   async findOne(id: string) {
-    const wcc = await this.wccModel.findById(id).lean();
+    let wcc: any = null;
+    if (Types.ObjectId.isValid(id)) {
+      wcc = await this.wccModel.findById(id).lean();
+    }
+    if (!wcc) {
+      wcc = await this.wccModel.findOne({ wccNumber: id }).lean();
+    }
     if (!wcc) throw new NotFoundException('WCC not found');
-    return wcc;
+    return { success: true, data: wcc };
   }
 
-  // ─── Generate WCC from Approved DARs ──────────────────────────────────────
+  // ─── Generate WCC from Approved DARs ─────────────────────────────────────────────────
   async generate(dto: { contractId: string; periodFrom: string; periodTo: string }, userId: string) {
+    // Guard: reject if contractId is not a valid ObjectId
+    if (!toObjId(dto.contractId)) {
+      throw new BadRequestException(`Invalid contractId: "${dto.contractId}"`);
+    }
     const contract = await this.contractModel.findById(dto.contractId).lean();
     if (!contract) throw new NotFoundException(`Contract "${dto.contractId}" not found`);
 
@@ -67,11 +91,8 @@ export class WCCService {
       },
     }).lean();
 
-    if (!dars.length) {
-      throw new BadRequestException(
-        `No Approved DARs found for contract "${(contract as any).contractNumber}" between ${dto.periodFrom} and ${dto.periodTo}`,
-      );
-    }
+    // Note: We allow generating a WCC even with 0 approved DARs
+    // (the frontend can still generate a draft with 0 amounts)
 
     // Sum hours from DARs
     let totalOperatingHours = 0;
@@ -136,20 +157,31 @@ export class WCCService {
     this.logger.log(
       `WCC ${wccNumber} generated from ${dars.length} DARs. Total: $${subtotal}`,
     );
-    return wcc;
+    return {
+      success: true,
+      message: 'WCC generated successfully from approved DARs',
+      data: wcc,
+    };
   }
 
-  // ─── Approve WCC ──────────────────────────────────────────────────────────
+  // ─── Approve WCC ──────────────────────────────────────────────────────────────
   async approve(id: string, userId: string) {
-    const wcc = await this.wccModel.findById(id);
+    let wcc: any = null;
+    if (Types.ObjectId.isValid(id)) {
+      wcc = await this.wccModel.findById(id);
+    }
+    if (!wcc) {
+      wcc = await this.wccModel.findOne({ wccNumber: id });
+    }
     if (!wcc) throw new NotFoundException('WCC not found');
     if (wcc.status === 'Approved') throw new BadRequestException('WCC already approved');
     if (wcc.status === 'Invoiced') throw new BadRequestException('WCC already invoiced');
 
-    return this.wccModel.findByIdAndUpdate(
-      id,
+    const updated = await this.wccModel.findByIdAndUpdate(
+      wcc._id,
       { $set: { status: 'Approved', approvedBy: new Types.ObjectId(userId), approvedAt: new Date() } },
       { new: true },
     ).lean();
+    return { success: true, message: 'WCC approved successfully', data: updated };
   }
 }
