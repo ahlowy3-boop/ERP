@@ -4,6 +4,15 @@ import {
 } from 'class-validator';
 import { Type } from 'class-transformer';
 
+// ── ContractAsset DTO ─────────────────────────────────────────────────────────
+export class ContractAssetDto {
+  @IsString() @IsNotEmpty() assetId!: string;
+  @IsOptional() @IsString() assetNumber?: string;
+  @IsString() @IsNotEmpty() equipmentName!: string;
+  @IsString() @IsNotEmpty() category!: string;
+  @IsOptional() @IsString() location?: string;
+}
+
 export class RateSheetItemDto {
   @IsString() @IsNotEmpty() id!: string;
   @IsString() @IsNotEmpty() description!: string;
@@ -82,6 +91,13 @@ export class CreateContractDto {
   @IsOptional() @IsString() parentCostCenterCode?: string;
   @IsOptional() @IsString() notes?: string;
   @IsOptional() @IsString() status?: string;
+
+  // Multi-asset support (new)
+  @IsOptional()
+  @IsArray()
+  @ValidateNested({ each: true })
+  @Type(() => ContractAssetDto)
+  assets?: ContractAssetDto[];
 }
 
 export class UpdateContractStatusDto {

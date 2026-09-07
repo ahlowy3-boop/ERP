@@ -4,6 +4,27 @@ import { MongooseModule } from '@nestjs/mongoose';
 
 export const ContractModelName = 'Contract';
 
+// ── ContractAsset sub-document ────────────────────────────────────────────────
+@Schema({ _id: false })
+class ContractAsset {
+  @Prop({ type: String, required: true })
+  assetId!: string;          // _id from source collection
+
+  @Prop({ type: String, default: '' })
+  assetNumber!: string;      // equipment code / vehicle code
+
+  @Prop({ type: String, required: true })
+  equipmentName!: string;    // human-readable asset name
+
+  @Prop({ type: String, required: true })
+  category!: string;         // 'Rig' | 'Generator' | 'Vehicle' | 'Camp' | ...
+
+  @Prop({ type: String, default: '' })
+  location!: string;         // deployment location
+}
+const ContractAssetSchema = SchemaFactory.createForClass(ContractAsset);
+
+
 @Schema({ timestamps: true, collection: 'contracts' })
 export class Contract extends Document {
   @Prop({ required: true, unique: true, trim: true })
@@ -50,12 +71,22 @@ export class Contract extends Document {
   @Prop({ type: String, default: null })
   scope?: string;
 
-  // Rig / Equipment
+  // Rig / Equipment (legacy — kept for backward compatibility)
   @Prop({ type: Types.ObjectId, ref: 'Equipment', default: null })
   rigId?: Types.ObjectId;
 
   @Prop({ type: String, default: null })
   rigName?: string;
+
+  // Multi-asset list (new field — preferred over rigId for new contracts)
+  @Prop({ type: [ContractAssetSchema], default: [] })
+  assets!: {
+    assetId: string;
+    assetNumber: string;
+    equipmentName: string;
+    category: string;
+    location: string;
+  }[];
 
   // Rate Sheet
   @Prop({

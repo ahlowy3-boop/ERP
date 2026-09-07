@@ -98,10 +98,24 @@ export class ContractsService {
   async create(dto: CreateContractDto, userId: string) {
     const contractNumber = await this.generateContractNumber();
 
+    // ── Auto-populate rigId / rigName from assets[] if not explicitly provided ──
+    const incomingAssets: any[] = Array.isArray(dto.assets) ? dto.assets : [];
+
+    let resolvedRigId = dto.rigId;
+    let resolvedRigName = dto.rigName;
+
+    if (incomingAssets.length > 0 && !resolvedRigId) {
+      const firstRig = incomingAssets.find((a: any) => a.category === 'Rig');
+      if (firstRig) {
+        resolvedRigId  = firstRig.assetId;
+        resolvedRigName = firstRig.equipmentName;
+      }
+    }
+
     // Validate rig exists if provided
-    if (dto.rigId) {
-      const rig = await this.equipmentModel.findById(dto.rigId).lean().exec();
-      if (!rig) throw new NotFoundException(`Equipment "${dto.rigId}" not found`);
+    if (resolvedRigId && Types.ObjectId.isValid(resolvedRigId)) {
+      const rig = await this.equipmentModel.findById(resolvedRigId).lean().exec();
+      if (!rig) throw new NotFoundException(`Equipment "${resolvedRigId}" not found`);
       if (rig.status === 'Active') {
         throw new BadRequestException(
           `Equipment "${rig.equipmentName}" is already active on another project`,
@@ -112,15 +126,22 @@ export class ContractsService {
     const contract = await this.contractModel.create({
       ...dto,
       contractNumber,
-      rigId: dto.rigId ? new Types.ObjectId(dto.rigId) : undefined,
+      rigId:   resolvedRigId && Types.ObjectId.isValid(resolvedRigId) ? new Types.ObjectId(resolvedRigId) : undefined,
+      rigName: resolvedRigName || undefined,
+      assets:  incomingAssets,
       startDate: new Date(dto.startDate),
-      endDate: new Date(dto.endDate),
+      endDate:   new Date(dto.endDate),
       status: 'Draft',
       createdBy: new Types.ObjectId(userId),
     });
 
-    this.logger.log(`Contract created: ${contractNumber} by ${userId}`);
-    return contract;
+    this.logger.log(`Contract created: ${contractNumber} by ${userId} | assets: ${incomingAssets.length}`);
+    return {
+      success:    true,
+      statusCode: 201,
+      message:    'Contract created successfully',
+      data:       contract,
+    };
   }
 
   // ─── Update (Draft only) ───────────────────────────────────────────────────
@@ -133,12 +154,34 @@ export class ContractsService {
       );
     }
 
+    // Build update payload — only include what was explicitly sent
+    const updatePayload: any = { ...dto };
+
+    // Handle assets: replace full array when provided; keep existing when absent
+    if (Array.isArray(dto.assets)) {
+      updatePayload.assets = dto.assets;
+
+      // Auto-sync rigId/rigName from assets[] when rigId not separately sent
+      if (!dto.rigId && dto.assets.length > 0) {
+        const firstRig = dto.assets.find((a: any) => a.category === 'Rig');
+        if (firstRig) {
+          updatePayload.rigId   = firstRig.assetId;
+          updatePayload.rigName = firstRig.equipmentName;
+        }
+      }
+    }
+
     const updated = await this.contractModel
-      .findByIdAndUpdate(id, { $set: dto }, { new: true })
+      .findByIdAndUpdate(id, { $set: updatePayload }, { new: true })
       .lean()
       .exec();
 
-    return updated;
+    return {
+      success: true,
+      statusCode: 200,
+      message: 'Contract updated successfully',
+      data: updated,
+    };
   }
 
   // ─── Update Status (+ Auto-Engine) ────────────────────────────────────────
