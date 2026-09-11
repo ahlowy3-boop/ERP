@@ -16,15 +16,16 @@ export class AssetsService {
   private readonly logger = new Logger(AssetsService.name);
 
   constructor(
-    @InjectModel(EquipmentModelName)       private equipmentModel: Model<any>,
+    @InjectModel(EquipmentModelName)       private equipmentModel:  Model<any>,
     @InjectModel(AssetAssignmentModelName) private assignmentModel: Model<any>,
     @InjectModel(AssetTransferModelName)   private transferModel:   Model<any>,
     @InjectModel(AssetDisposalModelName)   private disposalModel:   Model<any>,
     @InjectModel(AssetHistoryModelName)    private historyModel:    Model<any>,
   ) {}
 
-  // ─── Internal: Log history ─────────────────────────────────────────────
+  // ─── Internal: Log history ───────────────────────────────────────────
   private async logHistory(data: {
+
     assetId: string | Types.ObjectId;
     equipmentCode: string;
     changeType: 'Location Change' | 'Status Change' | 'Project Assignment' | 'Maintenance';
@@ -294,3 +295,5 @@ export class AssetsService {
     return { message: 'History record added', data: record };
   }
 }
+
+//
