@@ -77,16 +77,40 @@ export class DARService {
     return { success: true, data: dar };
   }
 
+  // ─── Auto-Number ──────────────────────────────────────────────────────────
+  private async generateDarNumber(): Promise<string> {
+    const year = new Date().getFullYear();
+    const prefix = `DAR-${year}-`;
+    const last = await this.darModel
+      .findOne({ darNumber: { $regex: `^${prefix}` } })
+      .sort({ darNumber: -1 }).lean();
+    let seq = 1;
+    if (last) {
+      const parts = (last as any).darNumber?.split('-') || [];
+      const n = parseInt(parts[parts.length - 1], 10);
+      if (!isNaN(n)) seq = n + 1;
+    }
+    return `${prefix}${String(seq).padStart(4, '0')}`;
+  }
+
   // ─── Create ───────────────────────────────────────────────────────────────
   async create(dto: any, userId: string) {
+    // Guard contractId
+    if (!toObjId(dto.contractId)) {
+      throw new BadRequestException(`Invalid contractId: "${dto.contractId}"`);
+    }
     const contract = await this.contractModel.findById(dto.contractId).lean();
     if (!contract) throw new NotFoundException(`Contract "${dto.contractId}" not found`);
     if ((contract as any).status !== 'Active') {
       throw new BadRequestException('DAR can only be created for Active contracts');
     }
 
-    const rig = await this.equipmentModel.findById(dto.rigId).lean();
-    if (!rig) throw new NotFoundException(`Rig "${dto.rigId}" not found`);
+    // Guard rigId — optional for multi-asset contracts
+    let rig: any = null;
+    if (dto.rigId && toObjId(dto.rigId)) {
+      rig = await this.equipmentModel.findById(dto.rigId).lean();
+      if (!rig) throw new NotFoundException(`Rig "${dto.rigId}" not found`);
+    }
 
     // Validate hours ≤ 24
     const totalHours = (dto.operatingHours || 0) + (dto.standbyHours || 0) +
@@ -95,19 +119,25 @@ export class DARService {
       throw new BadRequestException(`Total hours (${totalHours}) must not exceed 24`);
     }
 
-    // Check for duplicate DAR (same rig + same date)
-    const existing = await this.darModel.findOne({
+    // Check for duplicate DAR (same contract + rig + date)
+    const dupFilter: any = {
       contractId: new Types.ObjectId(dto.contractId),
-      rigId: new Types.ObjectId(dto.rigId),
       reportDate: new Date(dto.reportDate),
-    });
+    };
+    if (rig) dupFilter.rigId = new Types.ObjectId(dto.rigId);
+
+    const existing = await this.darModel.findOne(dupFilter);
     if (existing) throw new BadRequestException(`A DAR already exists for this rig on ${dto.reportDate}`);
 
+    const darNumber = await this.generateDarNumber();
+    const darUserId = toObjId(userId);
+
     const dar = await this.darModel.create({
+      darNumber,
       contractId: new Types.ObjectId(dto.contractId),
       contractNumber: (contract as any).contractNumber,
-      rigId: new Types.ObjectId(dto.rigId),
-      rigName: (rig as any).equipmentName,
+      rigId: rig ? new Types.ObjectId(dto.rigId) : undefined,
+      rigName: rig ? (rig as any).equipmentName : (dto.rigName || ''),
       projectId: (contract as any).projectId || null,
       projectCode: (contract as any).projectCode || null,
       costCenterCode: (contract as any).costCenterCode || null,
@@ -123,11 +153,11 @@ export class DARService {
       weatherConditions: dto.weatherConditions || '',
       preparedBy: dto.preparedBy || '',
       materialsUsed: dto.materialsUsed || [],
-      status: 'Submitted',
-      createdBy: new Types.ObjectId(userId),
+      status: 'Draft',
+      createdBy: darUserId || undefined,
     });
 
-    this.logger.log(`DAR created: ${(contract as any).contractNumber} — ${dto.reportDate}`);
+    this.logger.log(`DAR created: ${darNumber} — ${dto.reportDate}`);
     return {
       success: true,
       message: 'DAR created successfully',
@@ -135,14 +165,14 @@ export class DARService {
     };
   }
 
-  // ─── Safe lookup (supports ObjectId OR darNumber OR custom string) ─────────
+  // ─── Safe lookup: supports MongoDB _id OR darNumber string ─────────────────
   private async findDar(id: string) {
     if (Types.ObjectId.isValid(id)) {
       const doc = await this.darModel.findById(id);
       if (doc) return doc;
     }
-    // Fallback: match darNumber or any string field the frontend might pass
-    return this.darModel.findOne({ $or: [{ darNumber: id }] });
+    // Fallback by darNumber (e.g. "DAR-2026-0001")
+    return this.darModel.findOne({ darNumber: id });
   }
 
   // ─── Submit ───────────────────────────────────────────────────────────────
@@ -152,13 +182,14 @@ export class DARService {
     if (dar.status === 'Submitted') throw new BadRequestException('DAR is already submitted');
     if (dar.status === 'Approved') throw new BadRequestException('Approved DAR cannot be re-submitted');
 
+    const uid = toObjId(userId);
     const updated = await this.darModel.findByIdAndUpdate(
       dar._id,
-      { $set: { status: 'Submitted', submittedBy: new Types.ObjectId(userId), submittedAt: new Date() } },
+      { $set: { status: 'Submitted', ...(uid ? { submittedBy: uid, submittedAt: new Date() } : {}) } },
       { new: true },
     ).lean();
 
-    this.logger.log(`DAR submitted: ${dar._id} by ${userId}`);
+    this.logger.log(`DAR submitted: ${dar._id}`);
     return { success: true, message: 'DAR submitted for approval', data: updated };
   }
 
@@ -168,21 +199,21 @@ export class DARService {
     if (!dar) throw new NotFoundException('DAR not found');
     if (dar.status === 'Approved') throw new BadRequestException('DAR is already approved');
 
+    const uid = toObjId(userId);
     const updated = await this.darModel.findByIdAndUpdate(
       dar._id,
       {
         $set: {
           status: 'Approved',
-          approvedBy: new Types.ObjectId(userId),
-          approvedAt: new Date(),
-          clientRepName: dto.clientRepName || dar.clientRepName,
+          ...(uid ? { approvedBy: uid, approvedAt: new Date() } : { approvedAt: new Date() }),
+          clientRepName:  dto.clientRepName  || dar.clientRepName,
           clientSignature: dto.clientSignature || dar.clientSignature,
         },
       },
       { new: true },
     ).lean();
 
-    this.logger.log(`DAR approved: ${dar._id} by ${userId}`);
+    this.logger.log(`DAR approved: ${dar._id}`);
     return { success: true, message: 'DAR approved successfully', data: updated };
   }
 
@@ -191,9 +222,16 @@ export class DARService {
     const dar = await this.findDar(id);
     if (!dar) throw new NotFoundException('DAR not found');
 
+    const uid = toObjId(userId);
     const updated = await this.darModel.findByIdAndUpdate(
       dar._id,
-      { $set: { status: 'Rejected', rejectionReason: reason, approvedBy: new Types.ObjectId(userId), approvedAt: new Date() } },
+      {
+        $set: {
+          status: 'Rejected',
+          rejectionReason: reason,
+          ...(uid ? { approvedBy: uid, approvedAt: new Date() } : { approvedAt: new Date() }),
+        },
+      },
       { new: true },
     ).lean();
     return { success: true, message: 'DAR rejected', data: updated };

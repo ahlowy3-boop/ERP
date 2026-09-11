@@ -6,14 +6,17 @@ export const DARModelName = 'DAR';
 
 @Schema({ timestamps: true, collection: 'daily_activity_reports' })
 export class DAR extends Document {
+  @Prop({ type: String, unique: true, sparse: true, default: null })
+  darNumber?: string; // DAR-YYYY-XXXX (auto-generated on create)
+
   @Prop({ type: Types.ObjectId, ref: 'Contract', required: true })
   contractId!: Types.ObjectId;
 
   @Prop({ type: String, required: true })
   contractNumber!: string;
 
-  @Prop({ type: Types.ObjectId, ref: 'Equipment', required: true })
-  rigId!: Types.ObjectId;
+  @Prop({ type: Types.ObjectId, ref: 'Equipment', default: null })
+  rigId?: Types.ObjectId;
 
   @Prop({ type: String, default: '' })
   rigName!: string;
