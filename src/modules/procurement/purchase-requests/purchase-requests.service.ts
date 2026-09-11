@@ -5,7 +5,7 @@ import {
   NotFoundException,
 } from '@nestjs/common';
 import { InjectConnection } from '@nestjs/mongoose';
-import { Connection } from 'mongoose';
+import { Connection, Types } from 'mongoose';
 import { PurchaseRequestRepository } from './purchase-requests.repository';
 import { CreatePurchaseRequestDto } from './dto/create-pr.dto';
 import { NumberingService } from 'src/shared/services/numbering.service';
@@ -31,14 +31,31 @@ export class PurchaseRequestsService {
       const procurementChain = 'PR';
       const chainId = documentNumber;
 
-      const mivItemsToCreate: any[] = [];
+      // ── Map frontend fields → schema required fields ──────────────────────
+      const toObjId = (v?: string) =>
+        v && Types.ObjectId.isValid(v) ? new Types.ObjectId(v) : undefined;
 
-      for (const item of data.items) {
-        if (
-          item.fulfillFromStock &&
-          item.fulfillFromStock > 0 &&
-          item.itemCode
-        ) {
+      const mappedItems = (data.items || []).map((item: any) => ({
+        itemId:    toObjId(item.itemId),   // required by PRItem schema
+        quantity:  item.quantity || 1,
+        notes:     item.notes,
+        // pass extra fields for later use (MIV creation etc.)
+        itemCode:  item.itemCode,
+        itemName:  item.itemName,
+        itemType:  item.itemType,
+        uom:       item.uom,
+        fulfillFromStock:  item.fulfillFromStock,
+        fulfillByPurchase: item.fulfillByPurchase,
+        currentStock:      item.currentStock,
+        availableQty:      item.availableQty,
+        shortageQty:       item.shortageQty,
+        allowPartialIssue: item.allowPartialIssue,
+        category:          item.category,
+      }));
+
+      const mivItemsToCreate: any[] = [];
+      for (const item of data.items || []) {
+        if (item.fulfillFromStock && item.fulfillFromStock > 0 && item.itemCode) {
           await this._InventoryEngineService.deductStock(
             item.itemCode,
             item.fulfillFromStock,
@@ -53,17 +70,22 @@ export class PurchaseRequestsService {
       const purchaseRequest = await this._PRRepository.create(
         {
           ...data,
-          prNumber: documentNumber,
-          requestNumber: documentNumber,
-          documentNumber: documentNumber,
+          prNumber:             documentNumber,
+          requestNumber:        documentNumber,
+          documentNumber:       documentNumber,
           procurementChain,
           rootProcurementNumber: documentNumber,
           chainId,
+          // ── Map required schema fields ──────────────────────────────────
+          requesterId:  toObjId(data.requesterId),
+          departmentId: toObjId(data.departmentId),
+          requestDate:  data.requestDate ? new Date(data.requestDate) : new Date(),
+          requiredDate: data.requiredDate ? new Date(data.requiredDate) : undefined,
+          items: mappedItems,
         },
         { session },
       );
 
-      // ✅ تم حل الـ TODO: إنشاء سند صرف للمواد المتوفرة فوراً
       if (mivItemsToCreate.length > 0) {
         await this._MivsService.createAutoFromPR(
           purchaseRequest,
@@ -74,6 +96,7 @@ export class PurchaseRequestsService {
 
       await session.commitTransaction();
       return {
+        success: true,
         message: 'Purchase Request created successfully',
         data: purchaseRequest,
       };
@@ -86,6 +109,7 @@ export class PurchaseRequestsService {
       session.endSession();
     }
   }
+
   async updateStatus(id: string, status: string, approvedBy?: string) {
     const pr = await this._PRRepository.findOneAndUpdate(
       { _id: id },
