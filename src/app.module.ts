@@ -34,6 +34,7 @@ import { CountsModule } from './modules/inventory/counts/counts.module';
 import { TransfersModule } from './modules/inventory/transfers/transfers.module';
 import { ReportsModule as InventoryReportsModule } from './modules/inventory/reports/reports.module';
 import { InventoryAliasModule } from './modules/inventory/inventory-alias.module';
+import { OpeningStockModule } from './modules/inventory/opening-stock/opening-stock.module';
 
 // 🏗️ Phase 1 — Master Data & Contracts
 import { EquipmentModule } from './modules/assets/equipment/equipment.module';
@@ -143,6 +144,7 @@ import { HseModule } from './modules/hse/hse.module';
     TransfersModule,
     InventoryReportsModule,
     InventoryAliasModule,
+    OpeningStockModule,
 
     // 8. Phase 1 — Master Assets, Contracts, Projects, Cost Centers
     EquipmentModule,
