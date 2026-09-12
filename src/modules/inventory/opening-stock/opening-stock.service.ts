@@ -4,18 +4,14 @@ import {
   BadRequestException,
   InternalServerErrorException,
 } from '@nestjs/common';
-import { InjectConnection, InjectModel } from '@nestjs/mongoose';
-import { Connection, Model, Types } from 'mongoose';
+import { InjectConnection } from '@nestjs/mongoose';
+import { Connection, Types } from 'mongoose';
 import { OpeningStockRepository } from './opening-stock.repository';
-import { OpeningStockModelName } from './entities/opening-stock.model';
 import { InventoryItemRepository } from 'src/DB/repositories/inventory-item.repository';
 import { WarehouseRepository } from 'src/DB/repositories/warehouse.repository';
 import { InventoryEngineService } from 'src/shared/services/inventory-engine.service';
-import { NumberingService } from 'src/shared/services/numbering.service';
-import { CurrentUser } from 'src/common/decorators/current-user.decorator';
 
-// ── xlsx is read from buffer without external deps when possible ────────────
-// We require it lazily so the app doesn't crash if not installed on Railway
+// ── xlsx: lazy-load so Railway doesn't crash if not installed ──────────────
 let xlsx: any;
 try {
   // eslint-disable-next-line @typescript-eslint/no-require-imports
@@ -31,7 +27,6 @@ export class OpeningStockService {
     private readonly _ItemRepo: InventoryItemRepository,
     private readonly _WHRepo: WarehouseRepository,
     private readonly _InventoryEngine: InventoryEngineService,
-    private readonly _NumberingService: NumberingService,
     @InjectConnection() private readonly connection: Connection,
   ) {}
 

@@ -8,7 +8,6 @@ import { Model, Types } from 'mongoose';
 import { WarehouseRepository } from 'src/DB/repositories/warehouse.repository';
 import { CreateWarehouseDto } from './dto/create-warehouse.dto';
 import { UpdateWarehouseDto } from './dto/update-warehouse.dto';
-import { WarehouseModelName } from 'src/DB/models/warehouse.model';
 
 // We check these collections for warehouse references before soft-delete
 import { MIVModelName } from '../mivs/entities/miv.model';
