@@ -14,11 +14,16 @@ export abstract class AbstractRepository<TDocument extends Document> {
   }
 
   async findOne(
-    filterQuery: QueryFilter<TDocument>,
+    filterQuery: any,
     populate?: any,
   ): Promise<TDocument | null> {
-    const query = this.model.findOne(filterQuery);
-    if (populate) query.populate(populate);
+    const filter =
+      filterQuery && typeof filterQuery === 'object' && 'filter' in filterQuery
+        ? filterQuery.filter
+        : filterQuery;
+    const pop = populate || (filterQuery && filterQuery.populate);
+    const query = this.model.findOne(filter);
+    if (pop) query.populate(pop);
     return query.exec();
   }
 
@@ -56,40 +61,60 @@ export abstract class AbstractRepository<TDocument extends Document> {
   }
 
   async findOneAndUpdate(
-    filterQuery: QueryFilter<TDocument>,
+    filterQuery: any,
     updateData: UpdateQuery<TDocument>,
     options: QueryOptions = {},
   ): Promise<TDocument | null> {
+    const filter =
+      filterQuery && typeof filterQuery === 'object' && 'filter' in filterQuery
+        ? filterQuery.filter
+        : filterQuery;
     return this.model
-      .findOneAndUpdate(filterQuery, updateData, { new: true, ...options })
+      .findOneAndUpdate(filter, updateData, { new: true, ...options })
       .exec();
   }
 
   async update(
-    filterQuery: QueryFilter<TDocument>,
+    filterQuery: any,
     updateData: UpdateQuery<TDocument>,
     options: QueryOptions = {},
   ): Promise<any> {
-    return this.model.updateOne(filterQuery, updateData, options as any).exec();
+    const filter =
+      filterQuery && typeof filterQuery === 'object' && 'filter' in filterQuery
+        ? filterQuery.filter
+        : filterQuery;
+    return this.model.updateOne(filter, updateData, options as any).exec();
   }
 
-  async delete(filterQuery: QueryFilter<TDocument>): Promise<any> {
-    return this.model.deleteOne(filterQuery).exec();
+  async delete(filterQuery: any): Promise<any> {
+    const filter =
+      filterQuery && typeof filterQuery === 'object' && 'filter' in filterQuery
+        ? filterQuery.filter
+        : filterQuery;
+    return this.model.deleteOne(filter).exec();
   }
 
   async deleteMany(
-    filterQuery: QueryFilter<TDocument>,
+    filterQuery: any,
     options?: QueryOptions,
   ): Promise<any> {
-    return this.model.deleteMany(filterQuery, options as any).exec();
+    const filter =
+      filterQuery && typeof filterQuery === 'object' && 'filter' in filterQuery
+        ? filterQuery.filter
+        : filterQuery;
+    return this.model.deleteMany(filter, options as any).exec();
   }
 
   async softDelete(
-    filterQuery: QueryFilter<TDocument>,
+    filterQuery: any,
     options?: QueryOptions,
   ): Promise<any> {
+    const filter =
+      filterQuery && typeof filterQuery === 'object' && 'filter' in filterQuery
+        ? filterQuery.filter
+        : filterQuery;
     return this.model
-      .updateMany(filterQuery, { $set: { status: 'Inactive' } }, options as any)
+      .updateMany(filter, { $set: { status: 'Inactive' } }, options as any)
       .exec();
   }
 }

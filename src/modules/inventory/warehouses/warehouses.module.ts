@@ -7,6 +7,8 @@ import { MIVModel } from '../mivs/entities/miv.model';
 import { TransferModel } from '../transfers/entities/transfer.model';
 import { StockAdjustmentModel } from '../adjustments/entities/adjustment.model';
 import { OpeningStockModel } from '../opening-stock/entities/opening-stock.model';
+import { StockCountModel } from '../counts/entities/stock-count.model';
+import { InventoryItemModel } from 'src/DB/models/inventory-item.model';
 
 @Module({
   imports: [
@@ -15,6 +17,8 @@ import { OpeningStockModel } from '../opening-stock/entities/opening-stock.model
     TransferModel,
     StockAdjustmentModel,
     OpeningStockModel,
+    StockCountModel,
+    InventoryItemModel,
   ],
   controllers: [WarehousesController],
   providers: [WarehousesService, WarehouseRepository],
