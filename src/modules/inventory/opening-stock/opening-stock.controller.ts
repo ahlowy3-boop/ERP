@@ -3,6 +3,7 @@ import {
   Post,
   Get,
   Patch,
+  Delete,
   Body,
   Param,
   Query,
@@ -77,5 +78,16 @@ export class OpeningStockController {
     @CurrentUser('id') userId: string,
   ) {
     return this.svc.post(id, userId);
+  }
+
+  // DELETE /api/v1/inventory/opening-stock/:id
+  @Delete(':id')
+  @Roles(UserRole.SuperAdmin, UserRole.GeneralManager, UserRole.StoreKeeper)
+  @RequirePermissions('edit:inventory')
+  remove(
+    @Param('id') id: string,
+    @CurrentUser('id') userId: string,
+  ) {
+    return this.svc.remove(id, userId);
   }
 }

@@ -31,6 +31,11 @@ export class OpeningStock {
   @Prop({ type: String, required: true })
   unitOfMeasure!: string;
 
+  // ── Cost & Category (Optional) ──────────────────────────────────────────
+  @Prop({ type: Number, default: 0 }) unitCost?: number;
+  @Prop({ type: Number, default: 0 }) totalCost?: number;
+  @Prop({ type: String, default: null }) category?: string;
+
   // ── Optional batch / location fields ────────────────────────────────────
   @Prop({ type: String, default: null }) location?: string;
   @Prop({ type: String, default: null }) batchNumber?: string;
@@ -44,12 +49,14 @@ export class OpeningStock {
 
   @Prop({
     type: String,
-    enum: ['Draft', 'Posted'],
+    enum: ['Draft', 'Posted', 'POSTED', 'Cancelled', 'CANCELLED'],
     default: 'Draft',
   })
   status!: string;
 
   @Prop({ type: Date, default: null }) postedAt?: Date;
+  @Prop({ type: Date, default: null }) cancelledAt?: Date;
+  @Prop({ type: Types.ObjectId, ref: 'User', default: null }) cancelledBy?: Types.ObjectId;
 
   // ── Audit ─────────────────────────────────────────────────────────────────
   @Prop({ type: Types.ObjectId, ref: 'User', default: null })
