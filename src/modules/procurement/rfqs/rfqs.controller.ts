@@ -137,10 +137,13 @@ export class RfqsController {
   @RequirePermissions('approve:po')
   async award(
     @Param('id') rfqId: string,
-    @Body('vendorId') vendorId: string,
-    @Body('quotationId') quotationId: string,
+    @Body('vendorId') vendorId?: string,
+    @Body('quotationId') quotationId?: string,
+    @Body() body?: any,
   ) {
-    return this.rfqsService.awardQuotation(rfqId, quotationId, vendorId);
+    const vId = vendorId || body?.vendorId || body?.winningVendorId;
+    const qId = quotationId || body?.quotationId || body?.winningQuotationId;
+    return this.rfqsService.awardQuotation(rfqId, qId, vId);
   }
 
   // POST /api/v1/procurement/rfqs/:id/quotations/:qId/attachments

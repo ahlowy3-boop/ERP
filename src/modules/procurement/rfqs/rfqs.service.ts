@@ -423,76 +423,224 @@ export class RfqsService {
   }
 
   // ─── 7. Award RFQ & Generate Purchase Order (PO) ──────────────────────────
-  async awardQuotation(rfqId: string, quotationId: string, vendorId: string) {
+  async awardQuotation(rfqId: string, quotationId?: string, vendorId?: string) {
     const session = await this.connection.startSession();
     session.startTransaction();
 
     try {
       const rfq = await this._RfqsRepository.findOne({
-        filter: { _id: rfqId },
+        filter: {
+          $or: [
+            { _id: rfqId },
+            ...(Types.ObjectId.isValid(rfqId)
+              ? [{ _id: new Types.ObjectId(rfqId) }]
+              : []),
+          ],
+        },
         options: { session },
       });
       if (!rfq) throw new NotFoundException('RFQ not found');
 
-      const quotation = await this._QuotationsRepository.findOne({
-        filter: { _id: quotationId },
-        options: { session },
-      });
-      if (!quotation) {
-        throw new NotFoundException('Quotation not found');
+      // 1. Locate Quotation
+      let quotation: any = null;
+
+      // 1a. Try repository with quotationId
+      if (quotationId) {
+        quotation = await this._QuotationsRepository.findOne({
+          filter: {
+            $or: [
+              { _id: quotationId },
+              ...(Types.ObjectId.isValid(quotationId)
+                ? [{ _id: new Types.ObjectId(quotationId) }]
+                : []),
+            ],
+          },
+          options: { session },
+        });
       }
 
-      // 1. Update RFQ status & award info
+      // 1b. Try search within rfq.quotations array
+      if (!quotation && rfq.quotations && rfq.quotations.length > 0) {
+        if (quotationId) {
+          quotation = (rfq.quotations as any[]).find(
+            (q: any) =>
+              q._id?.toString() === quotationId?.toString() ||
+              q.id?.toString() === quotationId?.toString() ||
+              q.quotationNumber === quotationId,
+          );
+        }
+        if (!quotation && vendorId) {
+          quotation = (rfq.quotations as any[]).find(
+            (q: any) => q.vendorId?.toString() === vendorId?.toString(),
+          );
+        }
+      }
+
+      // 1c. Try repository with vendorId & rfqId
+      if (!quotation && vendorId) {
+        quotation = await this._QuotationsRepository.findOne({
+          filter: {
+            rfqId: rfqId.toString(),
+            $or: [
+              { vendorId: vendorId.toString() },
+              ...(Types.ObjectId.isValid(vendorId)
+                ? [{ vendorId: new Types.ObjectId(vendorId) }]
+                : []),
+            ],
+          },
+          options: { session },
+        });
+      }
+
+      // 1d. Fallback if single quotation exists on RFQ
+      if (!quotation && rfq.quotations && rfq.quotations.length === 1) {
+        quotation = rfq.quotations[0];
+      }
+
+      if (!quotation) {
+        throw new NotFoundException('Quotation not found for this RFQ');
+      }
+
+      const targetQuotationId = quotation._id?.toString() || quotationId;
+      const targetVendorId =
+        vendorId ||
+        quotation.vendorId?.toString() ||
+        (rfq.vendors?.[0]?.vendorId?.toString());
+
+      // 2. Backfill RFQ procurement chain fields if missing
+      if (!rfq.rootProcurementNumber && rfq.purchaseRequestId) {
+        try {
+          const pr = await this._PRRepository.findOne({
+            filter: { _id: rfq.purchaseRequestId },
+            options: { session },
+          });
+          if (pr) {
+            rfq.rootProcurementNumber =
+              pr.rootProcurementNumber || pr.requestNumber || 'PR-2026-0001';
+            if (pr.requestNumber) {
+              rfq.purchaseRequestNumber = pr.requestNumber;
+            }
+            rfq.chainId = pr.chainId || pr.requestNumber || rfq.rootProcurementNumber;
+          }
+        } catch (e: any) {
+          this.logger.warn(`Could not backfill PR chain: ${e.message}`);
+        }
+      }
+      if (!rfq.rootProcurementNumber) {
+        rfq.rootProcurementNumber =
+          rfq.rfqNumber || `RFQ-${new Date().getFullYear()}-0001`;
+      }
+      if (!rfq.chainId) {
+        rfq.chainId = rfq.rootProcurementNumber;
+      }
+      if (!rfq.procurementChain) {
+        rfq.procurementChain = rfq.rfqNumber || rfq.rootProcurementNumber;
+      }
+
+      // 3. Update RFQ status & award info
       rfq.status = 'Awarded';
-      rfq.awardedVendorId = Types.ObjectId.isValid(vendorId)
-        ? new Types.ObjectId(vendorId)
-        : (Types.ObjectId.isValid(quotation.vendorId) ? new Types.ObjectId(quotation.vendorId) : undefined);
+      rfq.awardedVendorId = Types.ObjectId.isValid(targetVendorId)
+        ? new Types.ObjectId(targetVendorId)
+        : undefined;
       rfq.awardedVendorName = quotation.vendorName;
       rfq.awardedQuotationId = quotation._id;
       rfq.awardedQuotationNumber = quotation.quotationNumber;
       rfq.awardedAt = new Date();
 
-      // 2. Mark winning quotation as Accepted, others as Rejected
-      await this._QuotationsRepository.model.updateMany(
-        { rfqId, _id: { $ne: quotationId } },
-        { $set: { status: 'Rejected' } },
-        { session },
-      );
+      // 4. Mark winning quotation as Accepted, others as Rejected
+      try {
+        if (rfqId) {
+          await this._QuotationsRepository.model.updateMany(
+            {
+              rfqId,
+              ...(targetQuotationId ? { _id: { $ne: targetQuotationId } } : {}),
+            },
+            { $set: { status: 'Rejected' } },
+            { session },
+          );
+        }
 
-      await this._QuotationsRepository.update(
-        { _id: quotationId },
-        { $set: { status: 'Accepted' } },
-        { session },
-      );
+        if (targetQuotationId) {
+          await this._QuotationsRepository.model.updateOne(
+            {
+              $or: [
+                { _id: targetQuotationId },
+                ...(Types.ObjectId.isValid(targetQuotationId)
+                  ? [{ _id: new Types.ObjectId(targetQuotationId) }]
+                  : []),
+              ],
+            },
+            { $set: { status: 'Accepted' } },
+            { session },
+          );
+        }
+      } catch (qUpdateErr: any) {
+        this.logger.warn(`Quotation status update note: ${qUpdateErr.message}`);
+      }
 
-      // 3. Automatically create Purchase Order (PO)
-      const po = await this._POService.createAutoFromQuotation(rfq, quotation, session);
+      // Update statuses in rfq.quotations array
+      if (rfq.quotations && rfq.quotations.length > 0) {
+        rfq.quotations.forEach((q: any) => {
+          if (
+            q._id?.toString() === targetQuotationId?.toString() ||
+            q.quotationNumber === quotation.quotationNumber
+          ) {
+            q.status = 'Accepted';
+          } else {
+            q.status = 'Rejected';
+          }
+        });
+      }
+
+      // Update vendor status in rfq.vendors
+      if (rfq.vendors && rfq.vendors.length > 0) {
+        rfq.vendors.forEach((v: any) => {
+          if (v.vendorId?.toString() === targetVendorId?.toString()) {
+            v.status = 'Awarded';
+          }
+        });
+      }
+
+      // 5. Automatically create Purchase Order (PO)
+      const po = await this._POService.createAutoFromQuotation(
+        rfq,
+        quotation,
+        session,
+      );
 
       rfq.generatedPurchaseOrderId = po._id;
       rfq.generatedPurchaseOrderNumber = po.poNumber;
       await rfq.save({ session });
 
-      // 4. Add Timeline Event to the winning vendor
-      if (vendorId && Types.ObjectId.isValid(vendorId)) {
-        await this.timelineModel.create(
-          [
-            {
-              vendorId: new Types.ObjectId(vendorId),
-              date: new Date(),
-              eventType: 'PO Issued',
-              title: `PO Issued from Awarded RFQ: ${po.poNumber}`,
-              description: `Awarded contract for ${rfq.rfqNumber} (Quotation: ${quotation.quotationNumber}). Total value: ${quotation.totalAmount}.`,
-              referenceNumber: po.poNumber,
-              amount: quotation.totalAmount,
-              performedByName: 'Procurement Manager',
-            },
-          ],
-          { session },
-        );
+      // 6. Add Timeline Event to the winning vendor
+      if (targetVendorId && Types.ObjectId.isValid(targetVendorId)) {
+        try {
+          await this.timelineModel.create(
+            [
+              {
+                vendorId: new Types.ObjectId(targetVendorId),
+                date: new Date(),
+                eventType: 'PO Issued',
+                title: `PO Issued from Awarded RFQ: ${po.poNumber}`,
+                description: `Awarded contract for ${rfq.rfqNumber} (Quotation: ${quotation.quotationNumber || 'N/A'}). Total value: ${quotation.totalAmount || quotation.price || 0}.`,
+                referenceNumber: po.poNumber,
+                amount: quotation.totalAmount || quotation.price || 0,
+                performedByName: 'Procurement Manager',
+              },
+            ],
+            { session },
+          );
+        } catch (timelineErr: any) {
+          this.logger.warn(
+            `Failed to create vendor timeline event: ${timelineErr.message}`,
+          );
+        }
       }
 
       await session.commitTransaction();
-      this.logger.log(`RFQ ${rfq.rfqNumber} awarded to ${quotation.vendorName}. Generated PO: ${po.poNumber}`);
+      this.logger.log(
+        `RFQ ${rfq.rfqNumber} awarded to ${quotation.vendorName}. Generated PO: ${po.poNumber}`,
+      );
 
       return {
         statusCode: 200,
@@ -505,11 +653,23 @@ export class RfqsService {
           awardedVendorName: rfq.awardedVendorName,
           awardedQuotationId: rfq.awardedQuotationId,
           awardedQuotationNumber: rfq.awardedQuotationNumber,
+          generatedPurchaseOrderId: po._id,
           generatedPurchaseOrderNumber: po.poNumber,
+          purchaseOrder: po,
         },
       };
     } catch (error: any) {
       await session.abortTransaction();
+      this.logger.error(
+        `Failed to award RFQ ${rfqId}: ${error.message}`,
+        error.stack,
+      );
+      if (
+        error instanceof NotFoundException ||
+        error instanceof BadRequestException
+      ) {
+        throw error;
+      }
       throw new InternalServerErrorException(
         `Failed to award RFQ: ${error.message}`,
       );

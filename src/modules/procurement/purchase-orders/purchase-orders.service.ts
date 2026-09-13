@@ -6,7 +6,7 @@ import {
 } from '@nestjs/common';
 import { PurchaseOrdersRepository } from './purchase-orders.repository';
 import { NumberingService } from 'src/shared/services/numbering.service';
-import { QueryOptions } from 'mongoose';
+import { QueryOptions, Types } from 'mongoose';
 
 @Injectable()
 export class PurchaseOrdersService {
@@ -23,29 +23,55 @@ export class PurchaseOrdersService {
   ) {
     try {
       // 1. توليد الأرقام
-      // ملحوظة: في نظامك يتم توليد PO-YYYY-PR_SEQ-RFQ_SEQ-QTN_SEQ-SEQ
-      // للتبسيط وللحفاظ على الأداء سنستخدم NumberingService لتوليد تسلسل PO
-      // يمكنك تعديل NumberingService لاحقاً ليدمج كل هذه الأرقام إذا لزم الأمر
+      const rootProc =
+        rfq.rootProcurementNumber ||
+        rfq.purchaseRequestNumber ||
+        rfq.chainId ||
+        'PR-2026-0001';
+      const prParts = rootProc.split('-');
+      const prYear = prParts[1] || new Date().getFullYear().toString();
+      const prSeq = prParts[2] || '0001';
 
-      const prParts = rfq.rootProcurementNumber.split('-'); // PR-2026-0001
-      const prYear = prParts[1];
-      const rfqSeqParts = rfq.rfqNumber.split('-');
-      const rfqSeq = rfqSeqParts[rfqSeqParts.length - 1]; // 0001
+      const rfqNum = rfq.rfqNumber || `RFQ-${prYear}-0001`;
+      const rfqSeqParts = rfqNum.split('-');
+      const rfqSeq = rfqSeqParts[rfqSeqParts.length - 1] || '0001';
 
-      const poSeq = await this._NumberingService.generatePONumber(session); // دالة افتراضية سنضيفها لـ NumberingService
-      const documentNumber = `PO-${prYear}-${prParts[2]}-${rfqSeq}-${quotation.quotationSequence}-${poSeq}`;
+      const poSeq = await this._NumberingService.generatePONumber(session);
+      const qSeq = quotation.quotationSequence || 1;
+      const documentNumber = `PO-${prYear}-${prSeq}-${rfqSeq}-${qSeq}-${poSeq}`;
       const poNumber = `PO-${prYear}-${poSeq}`;
 
       // 2. إعداد مصفوفة الأصناف
-      const poItems = quotation.items.map((item: any, index: number) => ({
-        itemCode: item.itemCode || 'N/A',
-        itemName: item.itemName,
-        quantity: item.quantity,
-        unitPrice: item.unitPrice,
-        uom: item.uom,
-        totalPrice: item.totalPrice,
-        sortOrder: index + 1,
-      }));
+      const rawItems =
+        quotation.items && quotation.items.length > 0
+          ? quotation.items
+          : rfq.items && rfq.items.length > 0
+            ? rfq.items
+            : [
+                {
+                  itemCode: 'N/A',
+                  itemName: rfq.title || 'Procurement Item',
+                  quantity: 1,
+                  unitPrice: quotation.totalAmount || quotation.price || 0,
+                  uom: 'EA',
+                  totalPrice: quotation.totalAmount || quotation.price || 0,
+                },
+              ];
+
+      const poItems = rawItems.map((item: any, index: number) => {
+        const qty = Number(item.quantity) || 1;
+        const price = Number(item.unitPrice || item.price) || 0;
+        const total = Number(item.totalPrice) || qty * price;
+        return {
+          itemCode: item.itemCode || 'N/A',
+          itemName: item.itemName || 'Procurement Item',
+          quantity: qty,
+          unitPrice: price,
+          uom: item.uom || 'EA',
+          totalPrice: total,
+          sortOrder: index + 1,
+        };
+      });
 
       // 3. تهيئة سير الاعتماد (Workflow Initialization)
       const approvalWorkflow = [
@@ -54,21 +80,34 @@ export class PurchaseOrdersService {
         { stepOrder: 3, role: 'CEO', status: 'Pending' },
       ];
 
+      const totalVal = Number(
+        quotation.totalAmount || quotation.price || quotation.subtotal || 0,
+      );
+      const subtotalVal = Number(
+        quotation.subtotal || quotation.price || totalVal,
+      );
+      const taxAmt = Number(quotation.taxAmount || 0);
+      const taxPct = Number(quotation.taxPercent || 0);
+
+      const vendorIdObj = Types.ObjectId.isValid(quotation.vendorId)
+        ? new Types.ObjectId(quotation.vendorId)
+        : quotation.vendorId;
+
       // 4. الحفظ في قاعدة البيانات
       const po = await this._PORepository.create(
         {
           poNumber,
           documentNumber,
-          procurementChain: `${rfq.procurementChain}-${quotation.quotationSequence}-${poSeq}`,
-          rootProcurementNumber: rfq.rootProcurementNumber,
-          chainId: rfq.chainId,
+          procurementChain: `${rfq.procurementChain || rfqNum}-${qSeq}-${poSeq}`,
+          rootProcurementNumber: rootProc,
+          chainId: rfq.chainId || rootProc,
           parentDocumentId: rfq._id,
-          parentDocumentNumber: rfq.rfqNumber,
+          parentDocumentNumber: rfqNum,
           rfqId: rfq._id,
-          rfqNumber: rfq.rfqNumber,
+          rfqNumber: rfqNum,
           quotationNumber: quotation.quotationNumber,
 
-          vendorId: quotation.vendorId,
+          vendorId: vendorIdObj,
           vendorName: quotation.vendorName,
           vendorContact: quotation.vendorContactPerson,
 
@@ -79,10 +118,11 @@ export class PurchaseOrdersService {
           paymentTerms: quotation.paymentTerms || 'N/A',
           status: 'Pending Approval',
 
-          subtotal: quotation.subtotal || quotation.totalAmount,
-          taxPercent: quotation.taxPercent,
-          taxAmount: quotation.taxAmount,
-          totalAmount: quotation.totalAmount,
+          totalValue: totalVal,
+          totalAmount: totalVal,
+          subtotal: subtotalVal,
+          taxPercent: taxPct,
+          taxAmount: taxAmt,
 
           chargeType: rfq.chargeType,
           projectId: rfq.projectId,
@@ -97,7 +137,7 @@ export class PurchaseOrdersService {
       );
 
       return po;
-    } catch (error) {
+    } catch (error: any) {
       throw new InternalServerErrorException(
         `Failed to auto-create PO: ${error.message}`,
       );
@@ -174,6 +214,8 @@ export class PurchaseOrdersService {
         documentNumber: poNumber,
         procurementChain: poSeq,
         rootProcurementNumber: poNumber,
+        totalValue: Number(data.totalValue || data.totalAmount || data.price || 0),
+        items: data.items || [],
         status: 'Draft',
         approvalWorkflow,
       },
