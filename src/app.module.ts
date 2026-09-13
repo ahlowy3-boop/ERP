@@ -25,6 +25,7 @@ import { DepartmentsModule } from './modules/admin/departments/departments.modul
 import { PurchaseRequestsModule } from './modules/procurement/purchase-requests/purchase-requests.module';
 import { PurchaseOrdersModule } from './modules/procurement/purchase-orders/purchase-orders.module';
 import { VendorsModule } from './modules/vendors/vendors.module';
+import { VendorPortalModule } from './modules/vendor-portal/vendor-portal.module';
 import { MrvsModule } from './modules/inventory/mrvs/mrvs.module';
 import { MivsModule } from './modules/inventory/mivs/mivs.module';
 import { WarehousesModule } from './modules/inventory/warehouses/warehouses.module';
@@ -134,6 +135,7 @@ import { HseModule } from './modules/hse/hse.module';
     PurchaseRequestsModule,
     PurchaseOrdersModule,
     VendorsModule,
+    VendorPortalModule,
     // Inventory Module (complete)
     WarehousesModule,
     ItemsModule,

@@ -103,4 +103,12 @@ export class AuthController {
   ) {
     return this.authService.updateProfile(userId, dto);
   }
+
+  // 🔓 POST /auth/vendor/register — Public vendor self-registration
+  @Public()
+  @Post('vendor/register')
+  @HttpCode(HttpStatus.CREATED)
+  registerVendor(@Body() dto: any) {
+    return this.authService.registerVendor(dto);
+  }
 }

@@ -22,6 +22,7 @@ import { PermissionModelName } from 'src/modules/admin/roles/entities/permission
 import { RefreshTokenModelName } from 'src/modules/admin/users/entities/refresh-token.model';
 import { PasswordResetTokenModelName } from 'src/modules/admin/users/entities/password-reset-token.model';
 import { AuditLogService } from 'src/shared/audit-logs/audit-logs.service';
+import { VendorModelName } from 'src/modules/vendors/entities/vendor.model';
 
 const BCRYPT_ROUNDS = 12;
 const MAX_LOGIN_ATTEMPTS = 5;
@@ -40,6 +41,7 @@ export class AuthService {
     @InjectModel(RefreshTokenModelName) private refreshTokenModel: Model<any>,
     @InjectModel(PasswordResetTokenModelName)
     private resetTokenModel: Model<any>,
+    @InjectModel(VendorModelName) private vendorModel: Model<any>,
     @InjectConnection() private connection: Connection,
     private jwtService: JwtService,
     private configService: ConfigService,
@@ -592,5 +594,95 @@ export class AuthService {
     }
 
     await this.userModel.updateOne({ _id: user._id }, { $set: updates });
+  }
+
+  // ─── Public Vendor Self-Registration ──────────────────────────────────────
+  async registerVendor(dto: any) {
+    // Duplicate checks
+    if (dto.taxNumber) {
+      const existing = await this.vendorModel.findOne({ taxNumber: dto.taxNumber });
+      if (existing) throw new BadRequestException('A vendor with this tax number is already registered');
+    }
+    if (dto.contactEmail) {
+      const existingUser = await this.userModel.findOne({
+        email: dto.contactEmail.toLowerCase(),
+      });
+      if (existingUser) throw new BadRequestException('An account with this email already exists');
+    }
+
+    // Generate vendor code
+    const year = new Date().getFullYear();
+    const prefix = `VND-${year}-`;
+    const last = await this.vendorModel
+      .findOne({ vendorCode: { $regex: `^${prefix}` } })
+      .sort({ vendorCode: -1 })
+      .lean();
+    let nextSeq = 1;
+    if (last) {
+      const parts = ((last as any).vendorCode || '').split('-');
+      nextSeq = (parseInt(parts[parts.length - 1], 10) || 0) + 1;
+    }
+    const vendorCode = `${prefix}${String(nextSeq).padStart(4, '0')}`;
+
+    // Create Vendor document
+    const vendor = await this.vendorModel.create({
+      vendorCode,
+      vendorName:             dto.companyName || dto.vendorName,
+      arabicName:             dto.arabicName,
+      category:               dto.category,
+      taxNumber:              dto.taxNumber,
+      vatNumber:              dto.vatNumber,
+      commercialRegistration: dto.commercialRegistration,
+      country:                dto.country,
+      address:                dto.address,
+      contactPerson:          dto.contactPerson,
+      contactEmail:           dto.contactEmail,
+      contactPhone:           dto.contactPhone,
+      paymentTerms:           dto.paymentTerms || 'Net 30',
+      currency:               dto.currency || 'USD',
+      bankAccounts:           dto.bankAccounts || [],
+      contactPersons:         dto.contactPersons || [],
+      status:                 'Pending',
+      approvalStatus:         'Pending',
+    });
+
+    // Generate portal username and temp password
+    const emailPrefix  = (dto.contactEmail || '').split('@')[0].replace(/[^a-zA-Z0-9]/g, '').toLowerCase();
+    const username     = `${emailPrefix}_vendor`;
+    const tempPassword = 'Welcome@2026';
+    const passwordHash = await bcrypt.hash(tempPassword, BCRYPT_ROUNDS);
+
+    // Find or create Vendor role
+    let vendorRole = await this.roleModel.findOne({ name: 'Vendor' });
+    if (!vendorRole) {
+      vendorRole = await this.roleModel.create({ name: 'Vendor', permissions: [] });
+    }
+
+    // Create User account for portal login
+    await this.userModel.create({
+      username,
+      email:       dto.contactEmail.toLowerCase(),
+      fullName:    dto.contactPerson || dto.companyName || username,
+      passwordHash,
+      roleId:      vendorRole._id,
+      vendorId:    vendor._id,
+      status:      'Active',
+      mustChangePassword: true,
+    });
+
+    this.logger.log(`Vendor self-registration: ${vendorCode} → portal user: ${username}`);
+
+    return {
+      statusCode: 201,
+      message: 'Vendor registration submitted successfully. Credentials created.',
+      data: {
+        vendorId:   vendor._id,
+        vendorCode,
+        credentials: {
+          username,
+          tempPassword,
+        },
+      },
+    };
   }
 }

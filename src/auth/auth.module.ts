@@ -16,6 +16,7 @@ import { RoleModel } from 'src/modules/admin/roles/entities/role.model';
 import { PermissionModel } from 'src/modules/admin/roles/entities/permission.model';
 import { RefreshTokenModel } from 'src/modules/admin/users/entities/refresh-token.model';
 import { PasswordResetTokenModel } from 'src/modules/admin/users/entities/password-reset-token.model';
+import { VendorMongooseModel } from 'src/modules/vendors/entities/vendor.model';
 
 @Module({
   imports: [
@@ -65,6 +66,7 @@ import { PasswordResetTokenModel } from 'src/modules/admin/users/entities/passwo
     PermissionModel,
     RefreshTokenModel,
     PasswordResetTokenModel,
+    VendorMongooseModel,
   ],
   providers: [AuthService, JwtStrategy, LocalStrategy],
   controllers: [AuthController],
