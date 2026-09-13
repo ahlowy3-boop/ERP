@@ -10,15 +10,17 @@ import { Model, Types } from 'mongoose';
 import { VendorModelName } from '../vendors/entities/vendor.model';
 import { VendorTimelineModelName } from '../vendors/entities/vendor-timeline.model';
 import { RFQModelName } from '../procurement/rfqs/entities/rfq.model';
+import { QuotationModelName } from '../procurement/rfqs/entities/quotation.model';
 
 @Injectable()
 export class VendorPortalService {
   private readonly logger = new Logger(VendorPortalService.name);
 
   constructor(
-    @InjectModel(VendorModelName)         private vendorModel:   Model<any>,
-    @InjectModel(VendorTimelineModelName) private timelineModel: Model<any>,
-    @InjectModel(RFQModelName)            private rfqModel:      Model<any>,
+    @InjectModel(VendorModelName)         private vendorModel:    Model<any>,
+    @InjectModel(VendorTimelineModelName) private timelineModel:  Model<any>,
+    @InjectModel(RFQModelName)            private rfqModel:       Model<any>,
+    @InjectModel(QuotationModelName)      private quotationModel: Model<any>,
   ) {}
 
   // ─── Resolve vendor from logged-in user ───────────────────────────────────
@@ -156,8 +158,48 @@ export class VendorPortalService {
       (v: any) => v.vendorId?.toString() === vendorId,
     );
 
+    // Sequential Quotation Number QTN-YYYY-XXXX (or based on RFQ Number)
+    const quotationsCount = await this.quotationModel.countDocuments({ rfqId: rfq._id });
+    const quotationSeq = quotationsCount + 1;
+    const paddedSeq = quotationSeq.toString().padStart(4, '0');
+    const rfqCode = (rfq.rfqNumber || '').replace(/^RFQ-/, '');
+    const quotationNumber = `QTN-${rfqCode}-${paddedSeq}`;
+
+    // Create Quotation record in procurement quotations collection
+    const createdQuotation = await this.quotationModel.create({
+      rfqId: rfq._id,
+      quotationNumber,
+      quotationSequence: quotationSeq,
+      procurementChain: `${rfq.procurementChain || rfqCode}-${paddedSeq}`,
+      vendorId: vendor._id.toString(),
+      vendorName: vendor.vendorName,
+      vendorContactPerson: vendor.contactPerson,
+      vendorPhone: vendor.contactPhone,
+      vendorEmail: vendor.contactEmail,
+      submissionDate: new Date(),
+      currency: dto.currency || vendor.currency || 'USD',
+      deliveryWeeks: dto.deliveryWeeks || 2,
+      paymentTerms: dto.paymentTerms || vendor.paymentTerms || 'Net 30',
+      remarks: dto.notes,
+      price: dto.subtotal || dto.totalAmount || 0,
+      subtotal: dto.subtotal || dto.totalAmount || 0,
+      taxPercent: dto.taxPercent ?? 15,
+      taxAmount: dto.taxAmount ?? 0,
+      totalAmount: dto.totalAmount ?? 0,
+      status: 'Submitted',
+      items: dto.items || [],
+      attachments: (dto.attachments || []).map((att: any) => ({
+        fileName: att.name || att.fileName,
+        fileSize: att.size || att.fileSize,
+        fileType: att.type || att.mimeType,
+        fileUrl: att.url || att.fileUrl,
+      })),
+    });
+
     const quotationData = {
       ...dto,
+      quotationId: createdQuotation._id,
+      quotationNumber,
       submittedAt: new Date(),
       vendorId,
       vendorName: vendor.vendorName,
@@ -166,6 +208,7 @@ export class VendorPortalService {
 
     if (vendorIndex >= 0) {
       rfq.vendors[vendorIndex].status = 'Submitted';
+      rfq.vendors[vendorIndex].quotationSubmittedDate = new Date();
       rfq.vendors[vendorIndex].quotation = quotationData;
     } else {
       rfq.vendors = rfq.vendors || [];
@@ -173,6 +216,7 @@ export class VendorPortalService {
         vendorId,
         vendorName: vendor.vendorName,
         status: 'Submitted',
+        quotationSubmittedDate: new Date(),
         quotation: quotationData,
       });
     }
@@ -180,7 +224,7 @@ export class VendorPortalService {
     // Update RFQ status
     const allVendors = rfq.vendors || [];
     const anySubmitted = allVendors.some((v: any) => v.status === 'Submitted');
-    if (anySubmitted && rfq.status === 'Published') {
+    if (anySubmitted && ['Published', 'Sent'].includes(rfq.status)) {
       rfq.status = 'Partially Responded';
     }
 
@@ -197,13 +241,17 @@ export class VendorPortalService {
       date:          new Date(),
       eventType:     'Quotation Submitted',
       title:         `Quotation submitted for ${rfq.rfqNumber}`,
-      description:   `Total amount: ${dto.totalAmount || 0} ${dto.currency || 'USD'}`,
+      description:   `Total amount: ${dto.totalAmount || 0} ${dto.currency || 'USD'} (Ref: ${quotationNumber})`,
       referenceNumber: rfq.rfqNumber,
       amount:        dto.totalAmount,
       performedByName: vendor.vendorName,
     });
 
-    this.logger.log(`Vendor ${vendor.vendorCode} submitted quotation for ${rfq.rfqNumber}`);
+    // Real-time Notification dispatch to Procurement Department
+    this.logger.log(
+      `[NOTIFICATION -> Procurement Department] Title: "New Quotation Received" | Details: "${vendor.vendorName}" submitted quotation ${quotationNumber} for RFQ #${rfq.rfqNumber}`,
+    );
+
     return {
       success: true,
       message: 'Quotation submitted successfully',

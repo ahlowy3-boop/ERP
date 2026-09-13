@@ -8,6 +8,7 @@ import { VendorDocumentSchema } from './entities/vendor-document.model';
 import { VendorTimelineModelName, VendorTimelineSchema } from './entities/vendor-timeline.model';
 import { VendorEvaluationModelName, VendorEvaluationSchema } from './entities/vendor-evaluation.model';
 import { VendorLedgerModelName, VendorLedgerSchema } from './entities/vendor-ledger.model';
+import { RFQModelName, RFQSchema } from '../procurement/rfqs/entities/rfq.model';
 
 @Module({
   imports: [
@@ -17,6 +18,7 @@ import { VendorLedgerModelName, VendorLedgerSchema } from './entities/vendor-led
       { name: VendorTimelineModelName,   schema: VendorTimelineSchema   },
       { name: VendorEvaluationModelName, schema: VendorEvaluationSchema },
       { name: VendorLedgerModelName,     schema: VendorLedgerSchema     },
+      { name: RFQModelName,              schema: RFQSchema              },
     ]),
   ],
   controllers: [VendorsController],

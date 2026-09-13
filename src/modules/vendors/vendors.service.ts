@@ -12,6 +12,7 @@ import { VendorDocumentModelName } from './entities/vendor-document.model';
 import { VendorTimelineModelName } from './entities/vendor-timeline.model';
 import { VendorEvaluationModelName } from './entities/vendor-evaluation.model';
 import { VendorLedgerModelName } from './entities/vendor-ledger.model';
+import { RFQModelName } from '../procurement/rfqs/entities/rfq.model';
 
 @Injectable()
 export class VendorsService {
@@ -23,6 +24,7 @@ export class VendorsService {
     @InjectModel(VendorTimelineModelName)   private timelineModel:   Model<any>,
     @InjectModel(VendorEvaluationModelName) private evalModel:       Model<any>,
     @InjectModel(VendorLedgerModelName)     private ledgerModel:     Model<any>,
+    @InjectModel(RFQModelName)              private rfqModel:        Model<any>,
   ) {}
 
   // ─── Generate Vendor Code VND-YYYY-XXXX ───────────────────────────────────
@@ -242,6 +244,33 @@ export class VendorsService {
     }
 
     await this.vendorModel.findByIdAndUpdate(id, { $set: updateData });
+
+    // Freeze active RFQ participations immediately when blacklisted
+    if (isBlacklisting) {
+      await this.rfqModel.updateMany(
+        {
+          $or: [
+            { 'vendors.vendorId': vendor._id.toString() },
+            { 'vendors.vendorId': vendor._id },
+          ],
+          'vendors.status': { $in: ['Pending', 'Invited'] },
+        },
+        {
+          $set: { 'vendors.$[elem].status': 'Suspended' },
+        },
+        {
+          arrayFilters: [
+            {
+              $or: [
+                { 'elem.vendorId': vendor._id.toString() },
+                { 'elem.vendorId': vendor._id },
+              ],
+            },
+          ],
+        },
+      );
+      this.logger.warn(`Vendor ${vendor.vendorCode} blacklisted. Active RFQ participations frozen.`);
+    }
 
     // Timeline event
     const eventTitle = isBlacklisting

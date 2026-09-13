@@ -1,8 +1,9 @@
 import {
   Controller, Get, Post, Put, Patch, Delete,
-  Body, Param, Query, Request,
+  Body, Param, Query, Request, Res,
   UseInterceptors, UploadedFile, HttpCode, HttpStatus,
 } from '@nestjs/common';
+import type { Response } from 'express';
 import { FileInterceptor } from '@nestjs/platform-express';
 import { VendorsService } from './vendors.service';
 import { Roles } from 'src/common/decorators/roles.decorator';
@@ -207,11 +208,16 @@ export class VendorsController {
     UserRole.ProcurementManager, UserRole.FinanceManager,
   )
   @RequirePermissions('view:vendors')
-  downloadDocument(
+  async downloadDocument(
     @Param('id') id: string,
     @Param('documentId') documentId: string,
+    @Res() res: Response,
   ) {
-    return this.svc.downloadDocument(id, documentId);
+    const doc = await this.svc.downloadDocument(id, documentId);
+    if (doc?.data?.fileUrl) {
+      return res.redirect(doc.data.fileUrl);
+    }
+    return res.json(doc);
   }
 
   // ─────────────────────────────────────────────────────────────────────────

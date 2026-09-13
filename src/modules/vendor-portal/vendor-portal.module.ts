@@ -6,6 +6,7 @@ import { VendorModelName } from '../vendors/entities/vendor.model';
 import { VendorSchema } from '../vendors/entities/vendor.model';
 import { VendorTimelineModelName, VendorTimelineSchema } from '../vendors/entities/vendor-timeline.model';
 import { RFQModelName, RFQSchema } from '../procurement/rfqs/entities/rfq.model';
+import { QuotationModelName, QuotationSchema } from '../procurement/rfqs/entities/quotation.model';
 
 @Module({
   imports: [
@@ -13,6 +14,7 @@ import { RFQModelName, RFQSchema } from '../procurement/rfqs/entities/rfq.model'
       { name: VendorModelName,         schema: VendorSchema         },
       { name: VendorTimelineModelName, schema: VendorTimelineSchema },
       { name: RFQModelName,            schema: RFQSchema            },
+      { name: QuotationModelName,      schema: QuotationSchema      },
     ]),
   ],
   controllers: [VendorPortalController],
