@@ -25,6 +25,10 @@ export class CreatePurchaseRequestItemDto {
   @IsOptional() @IsString() itemDescription?: string;
   @IsOptional() @IsString() category?: string;
   @IsOptional() @IsNumber() @Type(() => Number) estimatedUnitCost?: number;
+  @IsOptional() @IsNumber() @Type(() => Number) unitPrice?: number;
+  @IsOptional() @IsNumber() @Type(() => Number) totalPrice?: number;
+  @IsOptional() @IsString() arabicName?: string;
+  @IsOptional() @IsString() notes?: string;
 
   @IsOptional() @IsString() serviceDescription?: string;
   @IsOptional() @IsString() scopeOfWork?: string;

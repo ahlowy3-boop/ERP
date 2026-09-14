@@ -1,6 +1,42 @@
 import { MongooseModule, Prop, Schema, SchemaFactory } from '@nestjs/mongoose';
 import { HydratedDocument, Types } from 'mongoose';
 
+@Schema({ _id: false })
+export class POItem {
+  @Prop({ type: Types.ObjectId, ref: 'InventoryItem' })
+  itemId?: Types.ObjectId;
+
+  @Prop({ type: String })
+  itemCode?: string;
+
+  @Prop({ type: String })
+  itemName?: string;
+
+  @Prop({ type: String })
+  arabicName?: string;
+
+  @Prop({ type: String, default: 'EA' })
+  uom?: string;
+
+  @Prop({ type: Number, required: true, min: 1 })
+  quantity!: number;
+
+  @Prop({ type: Number, default: 0 })
+  unitPrice?: number;
+
+  @Prop({ type: Number, default: 0 })
+  totalPrice?: number;
+
+  @Prop({ type: String })
+  category?: string;
+
+  @Prop({ type: String })
+  notes?: string;
+
+  @Prop({ type: Number })
+  sortOrder?: number;
+}
+
 @Schema({ timestamps: true, strict: false })
 export class PurchaseOrder {
   @Prop({ type: String, required: true, unique: true }) poNumber!: string;
@@ -22,7 +58,8 @@ export class PurchaseOrder {
     default: 'Draft',
   })
   status!: string;
-  @Prop({ type: Array, required: true }) items!: any[];
+  @Prop({ type: [SchemaFactory.createForClass(POItem)], default: [] })
+  items!: POItem[];
   @Prop({ type: Number, required: true }) totalValue!: number;
   @Prop({ type: Number }) totalAmount?: number;
   @Prop({ type: Number }) subtotal?: number;

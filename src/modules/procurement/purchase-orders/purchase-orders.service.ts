@@ -58,20 +58,79 @@ export class PurchaseOrdersService {
                 },
               ];
 
-      const poItems = rawItems.map((item: any, index: number) => {
+      // 2. إعداد مصفوفة الأصناف وحفظ الـ Snapshot كاملاً
+      let itemModel: any = null;
+      try {
+        itemModel = this._PORepository.model.db.model('InventoryItem');
+      } catch (e) {
+        // non-blocking
+      }
+
+      const poItems: any[] = [];
+      for (let index = 0; index < rawItems.length; index++) {
+        const item = rawItems[index];
+        let itemId = item.itemId
+          ? Types.ObjectId.isValid(item.itemId)
+            ? new Types.ObjectId(item.itemId)
+            : item.itemId
+          : undefined;
+        let itemCode = item.itemCode;
+        let itemName = item.itemName;
+        let arabicName = item.arabicName;
+        let uom = item.uom;
+        let category = item.category;
         const qty = Number(item.quantity) || 1;
-        const price = Number(item.unitPrice || item.price) || 0;
+        let price = Number(item.unitPrice || item.price) || 0;
+
+        // Lookup from InventoryItem if itemCode or itemName is missing
+        if (
+          itemModel &&
+          (!itemCode || itemCode === 'N/A' || !itemName || !uom) &&
+          (itemId || itemCode)
+        ) {
+          try {
+            const dbItem = await itemModel
+              .findOne(itemId ? { _id: itemId } : { itemCode })
+              .session(session)
+              .lean();
+            if (dbItem) {
+              itemId = itemId || dbItem._id;
+              itemCode =
+                itemCode && itemCode !== 'N/A' ? itemCode : dbItem.itemCode;
+              itemName =
+                itemName &&
+                itemName !== 'Procurement Item' &&
+                itemName !== 'Item'
+                  ? itemName
+                  : dbItem.itemName;
+              arabicName = arabicName || dbItem.arabicName;
+              uom = uom || dbItem.uom || 'EA';
+              category = category || dbItem.category;
+              if (!price && dbItem.unitPrice) {
+                price = Number(dbItem.unitPrice);
+              }
+            }
+          } catch (err) {
+            // non-blocking
+          }
+        }
+
         const total = Number(item.totalPrice) || qty * price;
-        return {
-          itemCode: item.itemCode || 'N/A',
-          itemName: item.itemName || 'Procurement Item',
+
+        poItems.push({
+          itemId,
+          itemCode: itemCode || 'N/A',
+          itemName: itemName || 'Procurement Item',
+          arabicName,
+          uom: uom || 'EA',
           quantity: qty,
           unitPrice: price,
-          uom: item.uom || 'EA',
           totalPrice: total,
+          category,
+          notes: item.notes,
           sortOrder: index + 1,
-        };
-      });
+        });
+      }
 
       // 3. تهيئة سير الاعتماد (Workflow Initialization)
       const approvalWorkflow = [
@@ -258,7 +317,7 @@ export class PurchaseOrdersService {
 
     return {
       message: 'PO approval step recorded successfully',
-      data: updatedPo || po,
+      data: this.formatPoItems(updatedPo || po),
     };
   }
 
@@ -348,8 +407,52 @@ export class PurchaseOrdersService {
 
     return {
       message: 'PO rejected successfully',
-      data: updatedPo || po,
+      data: this.formatPoItems(updatedPo || po),
     };
+  }
+
+  // ── Helper to ensure full item snapshot details even for legacy POs ─────────
+  private formatPoItems(po: any) {
+    if (!po) return po;
+    const poObj =
+      typeof po.toJSON === 'function'
+        ? po.toJSON()
+        : po.toObject
+          ? po.toObject()
+          : { ...po };
+    if (Array.isArray(poObj.items)) {
+      poObj.items = poObj.items.map((it: any) => {
+        const popItem =
+          it.itemId && typeof it.itemId === 'object' ? it.itemId : null;
+        return {
+          ...it,
+          itemId: popItem ? popItem._id : it.itemId,
+          itemCode:
+            it.itemCode && it.itemCode !== 'N/A'
+              ? it.itemCode
+              : popItem?.itemCode || it.itemCode || 'N/A',
+          itemName:
+            it.itemName &&
+            it.itemName !== 'Procurement Item' &&
+            it.itemName !== 'Item'
+              ? it.itemName
+              : popItem?.itemName || it.itemName || 'Procurement Item',
+          arabicName: it.arabicName || popItem?.arabicName,
+          uom: it.uom || popItem?.uom || 'EA',
+          quantity: it.quantity || 1,
+          unitPrice:
+            it.unitPrice !== undefined
+              ? it.unitPrice
+              : popItem?.unitPrice || 0,
+          totalPrice:
+            it.totalPrice !== undefined
+              ? it.totalPrice
+              : (it.quantity || 1) * (it.unitPrice || popItem?.unitPrice || 0),
+          category: it.category || popItem?.category,
+        };
+      });
+    }
+    return poObj;
   }
 
   async getPoDetails(poId: string) {
@@ -362,14 +465,23 @@ export class PurchaseOrdersService {
         { poNumber: poId },
       ],
     };
-    const po = await this._PORepository.findOne({ filter });
+    const po = await this._PORepository.findOne(
+      { filter },
+      [
+        {
+          path: 'items.itemId',
+          select: 'itemCode itemName arabicName uom category unitPrice quantity',
+          model: 'InventoryItem',
+        },
+      ],
+    );
     if (!po) throw new NotFoundException('Purchase Order not found');
-    return { data: po };
+    return { data: this.formatPoItems(po) };
   }
 
   // إنشاء PO يدوي (بدون المرور بـ RFQ)
   async createManual(data: any, session?: QueryOptions['session']) {
-    const poSeq = await this._NumberingService.generatePONumber(session); // يحتاج لإضافة الدالة في NumberingService
+    const poSeq = await this._NumberingService.generatePONumber(session);
     const poNumber = `PO-${new Date().getFullYear()}-${poSeq}`;
 
     const approvalWorkflow = [
@@ -378,6 +490,84 @@ export class PurchaseOrdersService {
       { stepOrder: 3, role: 'CEO', status: 'Pending' },
     ];
 
+    let itemModel: any = null;
+    try {
+      itemModel = this._PORepository.model.db.model('InventoryItem');
+    } catch (e) {
+      // non-blocking
+    }
+
+    const manualItems: any[] = [];
+    for (let index = 0; index < (data.items || []).length; index++) {
+      const item = data.items[index];
+      let itemId = item.itemId
+        ? Types.ObjectId.isValid(item.itemId)
+          ? new Types.ObjectId(item.itemId)
+          : item.itemId
+        : undefined;
+      let itemCode = item.itemCode;
+      let itemName = item.itemName;
+      let arabicName = item.arabicName;
+      let uom = item.uom;
+      let category = item.category;
+      const qty = Number(item.quantity) || 1;
+      let price = Number(item.unitPrice || item.price) || 0;
+
+      if (
+        itemModel &&
+        (!itemCode || itemCode === 'N/A' || !itemName || !uom) &&
+        (itemId || itemCode)
+      ) {
+        try {
+          const dbItem = await itemModel
+            .findOne(itemId ? { _id: itemId } : { itemCode })
+            .session(session)
+            .lean();
+          if (dbItem) {
+            itemId = itemId || dbItem._id;
+            itemCode =
+              itemCode && itemCode !== 'N/A' ? itemCode : dbItem.itemCode;
+            itemName =
+              itemName &&
+              itemName !== 'Procurement Item' &&
+              itemName !== 'Item'
+                ? itemName
+                : dbItem.itemName;
+            arabicName = arabicName || dbItem.arabicName;
+            uom = uom || dbItem.uom || 'EA';
+            category = category || dbItem.category;
+            if (!price && dbItem.unitPrice) {
+              price = Number(dbItem.unitPrice);
+            }
+          }
+        } catch (err) {
+          // non-blocking
+        }
+      }
+
+      const total = Number(item.totalPrice) || qty * price;
+
+      manualItems.push({
+        itemId,
+        itemCode: itemCode || 'N/A',
+        itemName: itemName || 'Procurement Item',
+        arabicName,
+        uom: uom || 'EA',
+        quantity: qty,
+        unitPrice: price,
+        totalPrice: total,
+        category,
+        notes: item.notes,
+        sortOrder: index + 1,
+      });
+    }
+
+    const totalVal = Number(
+      data.totalValue ||
+        data.totalAmount ||
+        manualItems.reduce((acc, it) => acc + (it.totalPrice || 0), 0),
+    );
+
     const po = await this._PORepository.create(
       {
         ...data,
@@ -385,23 +575,36 @@ export class PurchaseOrdersService {
         documentNumber: poNumber,
         procurementChain: poSeq,
         rootProcurementNumber: poNumber,
-        totalValue: Number(data.totalValue || data.totalAmount || data.price || 0),
-        items: data.items || [],
+        totalValue: totalVal,
+        totalAmount: totalVal,
+        subtotal: data.subtotal || totalVal,
+        items: manualItems,
         status: 'Draft',
         approvalWorkflow,
       },
       { session },
     );
 
-    return { message: 'Manual PO created successfully', data: po };
+    return {
+      message: 'Manual PO created successfully',
+      data: this.formatPoItems(po),
+    };
   }
 
   // جلب كافة أوامر الشراء
   async findAll(page: number = 1, limit: number = 20) {
-    return await this._PORepository.findAll({
+    const pos = await this._PORepository.findAll({
       paginate: { page, limit },
+      populate: [
+        {
+          path: 'items.itemId',
+          select: 'itemCode itemName arabicName uom category unitPrice quantity',
+          model: 'InventoryItem',
+        },
+      ],
       sort: { createdAt: -1 },
     });
+    return pos.map((p) => this.formatPoItems(p));
   }
 
   // إضافة دالة رفع العقد

@@ -1,15 +1,58 @@
 import { MongooseModule, Prop, Schema, SchemaFactory } from '@nestjs/mongoose';
 import { HydratedDocument, Types } from 'mongoose';
 
-@Schema()
-class PRItem {
-  @Prop({ type: Types.ObjectId, ref: 'Item', required: true })
-  itemId!: Types.ObjectId;
-  @Prop({ type: Number, required: true, min: 1 }) quantity!: number;
-  @Prop({ type: String }) notes?: string;
+@Schema({ _id: false })
+export class PRItem {
+  @Prop({ type: Types.ObjectId, ref: 'InventoryItem' })
+  itemId?: Types.ObjectId;
+
+  @Prop({ type: String })
+  itemCode?: string;
+
+  @Prop({ type: String })
+  itemName?: string;
+
+  @Prop({ type: String })
+  arabicName?: string;
+
+  @Prop({ type: String, default: 'EA' })
+  uom?: string;
+
+  @Prop({ type: Number, required: true, min: 1 })
+  quantity!: number;
+
+  @Prop({ type: Number, default: 0 })
+  unitPrice?: number;
+
+  @Prop({ type: Number, default: 0 })
+  totalPrice?: number;
+
+  @Prop({ type: String })
+  category?: string;
+
+  @Prop({ type: String })
+  notes?: string;
+
+  @Prop({ type: Number })
+  fulfillFromStock?: number;
+
+  @Prop({ type: Number })
+  fulfillByPurchase?: number;
+
+  @Prop({ type: Number })
+  currentStock?: number;
+
+  @Prop({ type: Number })
+  availableQty?: number;
+
+  @Prop({ type: Number })
+  shortageQty?: number;
+
+  @Prop({ type: Boolean })
+  allowPartialIssue?: boolean;
 }
 
-@Schema({ timestamps: true })
+@Schema({ timestamps: true, strict: false })
 export class PurchaseRequest {
   @Prop({ type: String, unique: true, sparse: true }) prNumber?: string;
   @Prop({ type: String, unique: true, sparse: true }) requestNumber?: string;

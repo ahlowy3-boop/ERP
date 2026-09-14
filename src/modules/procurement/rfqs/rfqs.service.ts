@@ -37,11 +37,17 @@ export class RfqsService {
     session.startTransaction();
 
     try {
-      // 1. Verify PR existence and status
-      const pr = await this._PRRepository.findOne({
-        filter: { _id: data.purchaseRequestId },
-        options: { session },
-      });
+      // 1. Verify PR existence and status (with populated items)
+      const pr = await this._PRRepository.findOne(
+        { filter: { _id: data.purchaseRequestId } },
+        [
+          {
+            path: 'items.itemId',
+            select: 'itemCode itemName arabicName uom category unitPrice quantity',
+            model: 'InventoryItem',
+          },
+        ],
+      );
       if (!pr) throw new NotFoundException('Purchase Request not found');
 
       // 2. Generate hierarchical RFQ Number (RFQ-YYYY-XXXX-XXXX)
@@ -63,6 +69,23 @@ export class RfqsService {
         invitationSentDate: new Date(),
       }));
 
+      // Map and snapshot PR items into RFQ
+      const rfqItems = (pr.items || []).map((it: any) => {
+        const popItem = it.itemId && typeof it.itemId === 'object' ? it.itemId : null;
+        return {
+          itemId: popItem ? popItem._id : it.itemId,
+          itemCode: (it.itemCode && it.itemCode !== 'N/A') ? it.itemCode : (popItem?.itemCode || it.itemCode || 'N/A'),
+          itemName: (it.itemName && it.itemName !== 'Item' && it.itemName !== 'Procurement Item') ? it.itemName : (popItem?.itemName || it.itemName || 'Item'),
+          arabicName: it.arabicName || popItem?.arabicName,
+          uom: it.uom || popItem?.uom || 'EA',
+          quantity: it.quantity || 1,
+          unitPrice: it.unitPrice !== undefined ? it.unitPrice : (popItem?.unitPrice || 0),
+          totalPrice: it.totalPrice !== undefined ? it.totalPrice : ((it.quantity || 1) * (it.unitPrice || popItem?.unitPrice || 0)),
+          category: it.category || popItem?.category,
+          notes: it.notes,
+        };
+      });
+
       // 4. Create RFQ document
       const rfq = await this._RfqsRepository.create(
         {
@@ -79,7 +102,7 @@ export class RfqsService {
           requiredDeliveryDate: data.requiredDeliveryDate ? new Date(data.requiredDeliveryDate) : undefined,
           requester: (pr as any).requestedBy || (pr as any).requesterName,
           status: 'Sent',
-          items: pr.items || [],
+          items: rfqItems,
           vendors,
           quotations: [],
           chargeType: pr.chargeType,
@@ -138,6 +161,50 @@ export class RfqsService {
     }
   }
 
+  // ── Helper to ensure full item snapshot details even for legacy RFQs ────────
+  private formatRfqItems(rfq: any) {
+    if (!rfq) return rfq;
+    const rfqObj =
+      typeof rfq.toJSON === 'function'
+        ? rfq.toJSON()
+        : rfq.toObject
+          ? rfq.toObject()
+          : { ...rfq };
+    if (Array.isArray(rfqObj.items)) {
+      rfqObj.items = rfqObj.items.map((it: any) => {
+        const popItem =
+          it.itemId && typeof it.itemId === 'object' ? it.itemId : null;
+        return {
+          ...it,
+          itemId: popItem ? popItem._id : it.itemId,
+          itemCode:
+            it.itemCode && it.itemCode !== 'N/A'
+              ? it.itemCode
+              : popItem?.itemCode || it.itemCode || 'N/A',
+          itemName:
+            it.itemName &&
+            it.itemName !== 'Item' &&
+            it.itemName !== 'Procurement Item'
+              ? it.itemName
+              : popItem?.itemName || it.itemName || 'Item',
+          arabicName: it.arabicName || popItem?.arabicName,
+          uom: it.uom || popItem?.uom || 'EA',
+          quantity: it.quantity || 1,
+          unitPrice:
+            it.unitPrice !== undefined
+              ? it.unitPrice
+              : popItem?.unitPrice || 0,
+          totalPrice:
+            it.totalPrice !== undefined
+              ? it.totalPrice
+              : (it.quantity || 1) * (it.unitPrice || popItem?.unitPrice || 0),
+          category: it.category || popItem?.category,
+        };
+      });
+    }
+    return rfqObj;
+  }
+
   // ─── 2. List RFQs with Filter, Search & Pagination ─────────────────────────
   async findAll(query: {
     page?: number;
@@ -171,6 +238,11 @@ export class RfqsService {
     const [items, total] = await Promise.all([
       this._RfqsRepository.model
         .find(filter)
+        .populate({
+          path: 'items.itemId',
+          select: 'itemCode itemName arabicName uom category unitPrice quantity',
+          model: 'InventoryItem',
+        })
         .sort({ [sortBy]: sortDir })
         .skip(skip)
         .limit(limit)
@@ -181,7 +253,7 @@ export class RfqsService {
     return {
       statusCode: 200,
       message: 'RFQs retrieved successfully',
-      data: items,
+      data: items.map((it) => this.formatRfqItems(it)),
       meta: {
         total,
         page,
@@ -193,7 +265,16 @@ export class RfqsService {
 
   // ─── 3. Get RFQ Details by ID ─────────────────────────────────────────────
   async findOne(id: string) {
-    const rfq = await this._RfqsRepository.findOne({ filter: { _id: id } });
+    const rfq = await this._RfqsRepository.findOne(
+      { filter: { _id: id } },
+      [
+        {
+          path: 'items.itemId',
+          select: 'itemCode itemName arabicName uom category unitPrice quantity',
+          model: 'InventoryItem',
+        },
+      ],
+    );
     if (!rfq) throw new NotFoundException('RFQ not found');
 
     // Fetch quotations associated with this RFQ
@@ -202,7 +283,7 @@ export class RfqsService {
       sort: { createdAt: -1 },
     });
 
-    const rfqObj = typeof (rfq as any).toJSON === 'function' ? (rfq as any).toJSON() : rfq;
+    const rfqObj = this.formatRfqItems(rfq);
 
     return {
       statusCode: 200,
