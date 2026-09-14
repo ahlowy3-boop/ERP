@@ -147,20 +147,70 @@ export class PurchaseOrdersService {
   // الموافقة على خطوة في سير الاعتماد
   async approveStep(
     poId: string,
-    role: string,
-    approverName: string,
+    role?: string,
+    approverName?: string,
     comments?: string,
+    stepOrder?: number,
   ) {
-    const po = await this._PORepository.findOne({ filter: { _id: poId } });
+    const filter = {
+      $or: [
+        { _id: poId },
+        ...(Types.ObjectId.isValid(poId)
+          ? [{ _id: new Types.ObjectId(poId) }]
+          : []),
+        { poNumber: poId },
+      ],
+    };
+    const po = await this._PORepository.findOne({ filter });
     if (!po) throw new NotFoundException('Purchase Order not found');
 
-    const stepIndex = po.approvalWorkflow.findIndex(
-      (step) => step.role === role,
-    );
-    if (stepIndex === -1)
-      throw new BadRequestException('Invalid approval role for this PO');
-    if (po.approvalWorkflow[stepIndex].status === 'Approved')
+    if (!po.approvalWorkflow || po.approvalWorkflow.length === 0) {
+      po.approvalWorkflow = [
+        { stepOrder: 1, role: 'Procurement Manager', status: 'Pending' },
+        { stepOrder: 2, role: 'Finance Director', status: 'Pending' },
+        { stepOrder: 3, role: 'CEO', status: 'Pending' },
+      ];
+    }
+
+    const normalizedRole = (role || '').trim().toLowerCase();
+    let stepIndex = -1;
+
+    if (normalizedRole) {
+      stepIndex = po.approvalWorkflow.findIndex(
+        (step: any) =>
+          step.role?.toLowerCase() === normalizedRole ||
+          step.role?.toLowerCase().replace(/\s+/g, '_') === normalizedRole ||
+          step.role?.toLowerCase().replace(/\s+/g, '') ===
+            normalizedRole.replace(/_/g, ''),
+      );
+    }
+
+    if (stepIndex === -1 && stepOrder !== undefined && stepOrder !== null) {
+      stepIndex = po.approvalWorkflow.findIndex(
+        (step: any) => step.stepOrder === Number(stepOrder),
+      );
+    }
+
+    // إذا لم يتم تحديد الدور أو الترتيب، نأخذ أول خطوة معلقة (Pending)
+    if (
+      stepIndex === -1 &&
+      !role &&
+      (stepOrder === undefined || stepOrder === null)
+    ) {
+      stepIndex = po.approvalWorkflow.findIndex(
+        (step: any) => step.status !== 'Approved',
+      );
+    }
+
+    if (stepIndex === -1) {
+      throw new BadRequestException(
+        `Invalid approval role '${role || stepOrder}' for this PO`,
+      );
+    }
+
+    if (po.approvalWorkflow[stepIndex].status === 'Approved') {
       throw new BadRequestException('Step already approved');
+    }
 
     // التأكد من أن الخطوة السابقة تم الموافقة عليها (إذا لم تكن الخطوة الأولى)
     if (
@@ -174,24 +224,145 @@ export class PurchaseOrdersService {
 
     // تحديث الخطوة
     po.approvalWorkflow[stepIndex].status = 'Approved';
-    po.approvalWorkflow[stepIndex].approverName = approverName;
+    po.approvalWorkflow[stepIndex].approverName =
+      approverName || 'Authorized Approver';
     po.approvalWorkflow[stepIndex].actionDate = new Date();
-    po.approvalWorkflow[stepIndex].comments = comments;
+    if (comments) {
+      po.approvalWorkflow[stepIndex].comments = comments;
+    }
 
-    // التحقق مما إذا كانت هذه هي الخطوة الأخيرة
+    // التحقق مما إذا كانت كافة الخطوات معتمدة
     const allApproved = po.approvalWorkflow.every(
-      (step) => step.status === 'Approved',
+      (step: any) => step.status === 'Approved',
     );
     if (allApproved) {
       po.status = 'Approved'; // تطبيق القاعدة المنطقية
     }
 
+    // إعلام Mongoose بتعديل المصفوفة الفرعية - ضروري جداً
+    po.markModified('approvalWorkflow');
+    po.markModified('status');
     await po.save();
-    return { message: 'PO approval step recorded successfully', data: po };
+
+    // تحديث مباشر في MongoDB لضمان الـ Persistence المطلق
+    const updatedPo = await this._PORepository.model.findByIdAndUpdate(
+      po._id,
+      {
+        $set: {
+          approvalWorkflow: po.approvalWorkflow,
+          status: po.status,
+        },
+      },
+      { new: true },
+    );
+
+    return {
+      message: 'PO approval step recorded successfully',
+      data: updatedPo || po,
+    };
+  }
+
+  // رفض خطوة في سير الاعتماد
+  async rejectStep(
+    poId: string,
+    role?: string,
+    rejecterName?: string,
+    reason?: string,
+    stepOrder?: number,
+  ) {
+    const filter = {
+      $or: [
+        { _id: poId },
+        ...(Types.ObjectId.isValid(poId)
+          ? [{ _id: new Types.ObjectId(poId) }]
+          : []),
+        { poNumber: poId },
+      ],
+    };
+    const po = await this._PORepository.findOne({ filter });
+    if (!po) throw new NotFoundException('Purchase Order not found');
+
+    if (!po.approvalWorkflow || po.approvalWorkflow.length === 0) {
+      po.approvalWorkflow = [
+        { stepOrder: 1, role: 'Procurement Manager', status: 'Pending' },
+        { stepOrder: 2, role: 'Finance Director', status: 'Pending' },
+        { stepOrder: 3, role: 'CEO', status: 'Pending' },
+      ];
+    }
+
+    const normalizedRole = (role || '').trim().toLowerCase();
+    let stepIndex = -1;
+
+    if (normalizedRole) {
+      stepIndex = po.approvalWorkflow.findIndex(
+        (step: any) =>
+          step.role?.toLowerCase() === normalizedRole ||
+          step.role?.toLowerCase().replace(/\s+/g, '_') === normalizedRole ||
+          step.role?.toLowerCase().replace(/\s+/g, '') ===
+            normalizedRole.replace(/_/g, ''),
+      );
+    }
+
+    if (stepIndex === -1 && stepOrder !== undefined && stepOrder !== null) {
+      stepIndex = po.approvalWorkflow.findIndex(
+        (step: any) => step.stepOrder === Number(stepOrder),
+      );
+    }
+
+    if (stepIndex === -1) {
+      stepIndex = po.approvalWorkflow.findIndex(
+        (step: any) => step.status !== 'Approved',
+      );
+    }
+
+    if (stepIndex === -1) {
+      throw new BadRequestException(
+        `Invalid approval role '${role || stepOrder}' for this PO`,
+      );
+    }
+
+    po.approvalWorkflow[stepIndex].status = 'Rejected';
+    po.approvalWorkflow[stepIndex].approverName =
+      rejecterName || 'Reviewer';
+    po.approvalWorkflow[stepIndex].actionDate = new Date();
+    if (reason) {
+      po.approvalWorkflow[stepIndex].comments = reason;
+    }
+
+    po.status = 'Cancelled';
+
+    po.markModified('approvalWorkflow');
+    po.markModified('status');
+    await po.save();
+
+    const updatedPo = await this._PORepository.model.findByIdAndUpdate(
+      po._id,
+      {
+        $set: {
+          approvalWorkflow: po.approvalWorkflow,
+          status: po.status,
+        },
+      },
+      { new: true },
+    );
+
+    return {
+      message: 'PO rejected successfully',
+      data: updatedPo || po,
+    };
   }
 
   async getPoDetails(poId: string) {
-    const po = await this._PORepository.findOne({ filter: { _id: poId } });
+    const filter = {
+      $or: [
+        { _id: poId },
+        ...(Types.ObjectId.isValid(poId)
+          ? [{ _id: new Types.ObjectId(poId) }]
+          : []),
+        { poNumber: poId },
+      ],
+    };
+    const po = await this._PORepository.findOne({ filter });
     if (!po) throw new NotFoundException('Purchase Order not found');
     return { data: po };
   }

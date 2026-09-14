@@ -1,15 +1,26 @@
-import { IsString, IsNotEmpty, IsEnum, IsOptional } from 'class-validator';
+import { IsString, IsNotEmpty, IsOptional } from 'class-validator';
 
 export class ApprovePoStepDto {
-  @IsEnum(['Procurement Manager', 'Finance Director', 'CEO'])
-  @IsNotEmpty()
-  role!: string;
+  @IsString()
+  @IsOptional()
+  role?: string;
 
   @IsString()
-  @IsNotEmpty()
-  approverName!: string;
+  @IsOptional()
+  action?: string;
+
+  @IsString()
+  @IsOptional()
+  approverName?: string;
+
+  @IsString()
+  @IsOptional()
+  approvedBy?: string;
 
   @IsString()
   @IsOptional()
   comments?: string;
+
+  @IsOptional()
+  stepOrder?: number;
 }

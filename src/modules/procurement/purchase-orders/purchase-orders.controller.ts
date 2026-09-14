@@ -27,9 +27,10 @@ export class PurchaseOrdersController {
   ) {
     return this.poService.approveStep(
       poId,
-      approveDto.role,
-      approveDto.approverName,
+      approveDto.role || approveDto.action,
+      approveDto.approverName || approveDto.approvedBy,
       approveDto.comments,
+      approveDto.stepOrder,
     );
   }
 
@@ -42,8 +43,39 @@ export class PurchaseOrdersController {
     return this.poService.approveStep(
       poId,
       approveDto.role || approveDto.action,
-      approveDto.approverName,
+      approveDto.approverName || approveDto.approvedBy,
       approveDto.comments,
+      approveDto.stepOrder,
+    );
+  }
+
+  // POST /api/v1/procurement/purchase-orders/:id/reject
+  @Post(':id/reject')
+  async rejectPoStep(
+    @Param('id') poId: string,
+    @Body() rejectDto: any,
+  ) {
+    return this.poService.rejectStep(
+      poId,
+      rejectDto.role || rejectDto.action,
+      rejectDto.rejecterName || rejectDto.approverName,
+      rejectDto.reason || rejectDto.comments,
+      rejectDto.stepOrder,
+    );
+  }
+
+  // Alias PATCH :id/reject
+  @Patch(':id/reject')
+  async rejectPoPatch(
+    @Param('id') poId: string,
+    @Body() rejectDto: any,
+  ) {
+    return this.poService.rejectStep(
+      poId,
+      rejectDto.role || rejectDto.action,
+      rejectDto.rejecterName || rejectDto.approverName,
+      rejectDto.reason || rejectDto.comments,
+      rejectDto.stepOrder,
     );
   }
   @Patch(':id/contract')
