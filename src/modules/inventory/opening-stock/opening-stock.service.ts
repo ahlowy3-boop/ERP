@@ -317,8 +317,9 @@ export class OpeningStockService {
       const catRaw      = getVal('Category', 'category', 'Item Category', 'itemCategory');
       const uomRaw      = getVal('Unit of Measure', 'unitOfMeasure', 'UOM', 'uom', 'Unit', 'unit');
 
-      const parsedQty  = parseFloat(qtyRaw);
-      const parsedCost = costRaw ? parseFloat(costRaw) : undefined;
+      const cleanNumStr = (val: string) => val.replace(/,/g, '').trim();
+      const parsedQty  = qtyRaw ? parseFloat(cleanNumStr(qtyRaw)) : NaN;
+      const parsedCost = costRaw ? parseFloat(cleanNumStr(costRaw)) : undefined;
 
       return {
         itemCode:        itemCodeRaw,

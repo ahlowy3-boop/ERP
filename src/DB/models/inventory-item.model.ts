@@ -5,6 +5,7 @@ export enum ItemStatus {
   InStock = 'In Stock',
   LowStock = 'Low Stock',
   OutOfStock = 'Out of Stock',
+  Available = 'Available',
 }
 
 export enum ItemType {

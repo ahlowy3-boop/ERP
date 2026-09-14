@@ -147,13 +147,13 @@ export class InventoryEngineService {
   // أضف هذه الدالة الخاصة (Private) داخل كلاس InventoryEngineService
 
   private async updateItemStatus(item: any, session?: QueryOptions['session']) {
-    let newStatus = 'Available';
+    let newStatus: string = ItemStatus.InStock;
 
     // قواعد العمل (Business Rules) لتغيير الحالة
     if (item.quantity === 0) {
-      newStatus = 'Out of Stock';
+      newStatus = ItemStatus.OutOfStock;
     } else if (item.quantity <= (item.minQuantity || 0)) {
-      newStatus = 'Low Stock';
+      newStatus = ItemStatus.LowStock;
     }
 
     // لا نحدث قاعدة البيانات إلا إذا تغيرت الحالة فعلياً لتوفير الموارد
