@@ -410,6 +410,14 @@ export class MrvsService {
     poDetails: any,
     session?: any,
   ) {
+    // Check if an MRV already exists for this inspection
+    const existingMrv = await this.mrvModel
+      .findOne({ inspectionRequestId: inspection._id })
+      .session(session || null);
+    if (existingMrv) {
+      return existingMrv;
+    }
+
     const mrvNumber = await this.numberingService.generateMRVNumber(session);
 
     // Map items with accepted quantities

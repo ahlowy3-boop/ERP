@@ -39,27 +39,36 @@ export class InspectionService {
     try {
       let inspection: any = null;
 
+      // أ) البحث المباشر في طلبات الفحص: بالـ requestNumber أو poNumber أو _id أو poId
+      const conditions: any[] = [
+        { requestNumber: id },
+        { poNumber: id },
+      ];
+
       if (Types.ObjectId.isValid(id)) {
-        inspection = await this._InspectionRepository.findOne({
-          filter: { _id: id },
-          options: { session },
-        });
-        if (!inspection) {
-          inspection = await this._InspectionRepository.findOne({
-            filter: { poId: id },
-            options: { session },
-          });
-        }
+        const objId = new Types.ObjectId(id);
+        conditions.push({ _id: objId });
+        conditions.push({ poId: objId });
+        conditions.push({ poId: id });
       }
 
+      // إعطاء الأولوية للطلب المعلق (Pending) إن وُجد
+      inspection = await this._InspectionRepository.model
+        .findOne({
+          $or: conditions,
+          status: 'Pending',
+        })
+        .session(session);
+
+      // إن لم نجد طلباً معلقاً، نبحث عن أي طلب مطابق للشروط
       if (!inspection) {
-        inspection = await this._InspectionRepository.findOne({
-          filter: { poNumber: id },
-          options: { session },
-        });
+        inspection = await this._InspectionRepository.model
+          .findOne({ $or: conditions })
+          .sort({ createdAt: -1 })
+          .session(session);
       }
 
-      // If still not found, check if an approved PO exists and auto-create inspection
+      // ب) في حال لم يتم العثور على طلب الفحص مباشرة، نفحص إن كان الـ id يخص أمر الشراء (PO)
       if (!inspection) {
         let po: any = null;
         if (Types.ObjectId.isValid(id)) {
@@ -70,32 +79,62 @@ export class InspectionService {
         }
 
         if (po) {
-          const requestNumber = await this._NumberingService.generateIRNumber(session);
-          const irDoc = await this._InspectionRepository.create(
-            {
-              requestNumber,
-              poId: po._id,
-              poNumber: po.poNumber,
-              vendorId: po.vendorId,
-              vendorName: po.vendorName || 'Vendor',
-              requestDate: new Date(),
-              requestedDate: new Date(),
+          // نبحث أولاً إن كان هناك طلب فحص مسجل مسبقاً لهذا الـ PO!
+          inspection = await this._InspectionRepository.model
+            .findOne({
+              $or: [
+                { poId: po._id },
+                { poId: po._id.toString() },
+                { poNumber: po.poNumber },
+              ],
               status: 'Pending',
-              items: (po.items || []).map((it: any) => ({
-                itemId: it.itemId,
-                itemCode: it.itemCode,
-                itemName: it.itemName || it.arabicName || 'Material',
-                uom: it.uom || 'EA',
-                quantityOrdered: it.quantity,
-                quantityReceived: it.quantity,
-                quantityAccepted: 0,
-                quantityRejected: 0,
-                status: 'Pending',
-              })),
-            },
-            { session },
-          );
-          inspection = irDoc;
+            })
+            .session(session);
+
+          if (!inspection) {
+            inspection = await this._InspectionRepository.model
+              .findOne({
+                $or: [
+                  { poId: po._id },
+                  { poId: po._id.toString() },
+                  { poNumber: po.poNumber },
+                ],
+              })
+              .sort({ createdAt: -1 })
+              .session(session);
+          }
+
+          // فقط في حال عدم وجود أي طلب فحص إطلاقاً لهذا الـ PO، ننشئ طلباً جديداً
+          if (!inspection) {
+            const requestNumber = await this._NumberingService.generateIRNumber(session);
+            const createdDocs = await this._InspectionRepository.model.create(
+              [
+                {
+                  requestNumber,
+                  poId: po._id,
+                  poNumber: po.poNumber,
+                  vendorId: po.vendorId,
+                  vendorName: po.vendorName || 'Vendor',
+                  requestDate: new Date(),
+                  requestedDate: new Date(),
+                  status: 'Pending',
+                  items: (po.items || []).map((it: any) => ({
+                    itemId: it.itemId,
+                    itemCode: it.itemCode,
+                    itemName: it.itemName || it.arabicName || 'Material',
+                    uom: it.uom || 'EA',
+                    quantityOrdered: it.quantity,
+                    quantityReceived: it.quantity,
+                    quantityAccepted: 0,
+                    quantityRejected: 0,
+                    status: 'Pending',
+                  })),
+                },
+              ] as any[],
+              { session },
+            );
+            inspection = createdDocs[0];
+          }
         }
       }
 
@@ -105,11 +144,7 @@ export class InspectionService {
         );
       }
 
-      if (inspection.status !== 'Pending') {
-        throw new BadRequestException('Inspection already processed');
-      }
-
-      // تحديث بيانات المفتش والكميات
+      // جـ) تحديث سجل الفحص الأصلي نفسه (In-place update)
       inspection.inspectorName = data.inspectorName;
       inspection.inspectionDate = data.inspectionDate
         ? new Date(data.inspectionDate)
@@ -140,7 +175,29 @@ export class InspectionService {
 
       await inspection.save({ session });
 
-      // إذا كان الفحص مقبولاً أو مقبولاً بشرط: إنشاء مسودة إذن إضافة مخزني MRV تلقائياً بالكميات المقبولة
+      // د) تنظيف أي سجلات مكررة بحالة Pending لنفس الـ PO لضمان بقاء السجل المعتمد فقط
+      if (inspection.poId || inspection.poNumber) {
+        const poFilters: any[] = [];
+        if (inspection.poId) {
+          poFilters.push({ poId: inspection.poId });
+          poFilters.push({ poId: inspection.poId.toString() });
+        }
+        if (inspection.poNumber) {
+          poFilters.push({ poNumber: inspection.poNumber });
+        }
+        if (poFilters.length > 0) {
+          await this._InspectionRepository.model.deleteMany(
+            {
+              _id: { $ne: inspection._id },
+              status: 'Pending',
+              $or: poFilters,
+            },
+            { session },
+          );
+        }
+      }
+
+      // هـ) إذا كان الفحص مقبولاً أو مقبولاً بشرط: إنشاء مسودة إذن إضافة مخزني MRV تلقائياً بالكميات المقبولة
       if (
         inspection.status === 'Accepted' ||
         inspection.status === 'Conditional'
@@ -164,7 +221,7 @@ export class InspectionService {
 
       return {
         success: true,
-        message: `Inspection submitted with status: ${inspection.status}`,
+        message: `Inspection submitted successfully with status: ${inspection.status}`,
         data: inspection,
       };
     } catch (error) {
@@ -181,27 +238,20 @@ export class InspectionService {
     session.startTransaction();
 
     try {
-      let inspection: any = null;
-
+      const conditions: any[] = [
+        { requestNumber: inspectionId },
+        { poNumber: inspectionId },
+      ];
       if (Types.ObjectId.isValid(inspectionId)) {
-        inspection = await this._InspectionRepository.findOne({
-          filter: { _id: inspectionId },
-          options: { session },
-        });
-        if (!inspection) {
-          inspection = await this._InspectionRepository.findOne({
-            filter: { poId: inspectionId },
-            options: { session },
-          });
-        }
+        const objId = new Types.ObjectId(inspectionId);
+        conditions.push({ _id: objId });
+        conditions.push({ poId: objId });
+        conditions.push({ poId: inspectionId });
       }
 
-      if (!inspection) {
-        inspection = await this._InspectionRepository.findOne({
-          filter: { poNumber: inspectionId },
-          options: { session },
-        });
-      }
+      const inspection = await this._InspectionRepository.model
+        .findOne({ $or: conditions })
+        .session(session);
 
       if (!inspection) {
         throw new NotFoundException(
@@ -269,12 +319,21 @@ export class InspectionService {
         .lean();
 
       for (const po of approvedPos) {
-        const existing = await this._InspectionRepository.findOne({
-          filter: { poId: po._id },
-        });
-        if (!existing) {
+        // فحص فريد ومؤكد: هل يوجد طلب فحص مسجل مسبقاً لهذا الـ PO (بـ poId كـ ObjectId أو String أو poNumber)؟
+        const existingList = await this._InspectionRepository.model
+          .find({
+            $or: [
+              { poId: po._id },
+              { poId: po._id.toString() },
+              { poNumber: po.poNumber },
+            ],
+          })
+          .sort({ createdAt: 1 });
+
+        if (existingList.length === 0) {
+          // لم يتم إنشاء أي طلب فحص لهذا الـ PO من قبل: ننشئ طلباً واحداً فقط بحالة Pending
           const requestNumber = await this._NumberingService.generateIRNumber();
-          await this._InspectionRepository.create({
+          await this._InspectionRepository.model.create({
             requestNumber,
             poId: po._id,
             poNumber: po.poNumber,
@@ -295,6 +354,16 @@ export class InspectionService {
               status: 'Pending',
             })),
           });
+        } else if (existingList.length > 1) {
+          // في حال وجود سجلات مكررة لنفس الـ PO:
+          // إذا كان أحد السجلات معتمداً (Accepted / Conditional / Rejected)، نحذف السجلات المعلقة المكررة
+          const hasProcessed = existingList.some((doc) => doc.status !== 'Pending');
+          if (hasProcessed) {
+            const pendingDuplicates = existingList.filter((doc) => doc.status === 'Pending');
+            for (const dup of pendingDuplicates) {
+              await this._InspectionRepository.model.deleteOne({ _id: dup._id });
+            }
+          }
         }
       }
     } catch {
@@ -327,22 +396,20 @@ export class InspectionService {
 
   // 5. جلب تفاصيل طلب فحص محدد
   async findOneInspection(id: string) {
-    let inspection: any = null;
+    const conditions: any[] = [
+      { requestNumber: id },
+      { poNumber: id },
+    ];
     if (Types.ObjectId.isValid(id)) {
-      inspection = await this._InspectionRepository.findOne({
-        filter: { _id: id },
-      });
-      if (!inspection) {
-        inspection = await this._InspectionRepository.findOne({
-          filter: { poId: id },
-        });
-      }
+      const objId = new Types.ObjectId(id);
+      conditions.push({ _id: objId });
+      conditions.push({ poId: objId });
+      conditions.push({ poId: id });
     }
-    if (!inspection) {
-      inspection = await this._InspectionRepository.findOne({
-        filter: { poNumber: id },
-      });
-    }
+
+    const inspection = await this._InspectionRepository.model
+      .findOne({ $or: conditions })
+      .sort({ createdAt: -1 });
 
     if (!inspection) {
       throw new NotFoundException('Inspection Request not found');

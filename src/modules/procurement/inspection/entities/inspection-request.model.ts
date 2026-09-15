@@ -29,8 +29,8 @@ const InspectionRequestItemSchema = SchemaFactory.createForClass(
 export class InspectionRequest {
   @Prop({ type: String, unique: true, index: true }) requestNumber!: string; // IR-2026-0001 / INS-2026-001
 
-  @Prop({ type: Types.ObjectId, ref: 'PurchaseOrder' }) poId?: Types.ObjectId;
-  @Prop({ type: String }) poNumber?: string;
+  @Prop({ type: Types.ObjectId, ref: 'PurchaseOrder', index: true }) poId?: Types.ObjectId;
+  @Prop({ type: String, index: true }) poNumber?: string;
 
   @Prop({ type: Types.ObjectId, ref: 'Vendor' }) vendorId?: Types.ObjectId;
   @Prop({ type: String, required: true }) vendorName!: string;
