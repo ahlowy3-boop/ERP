@@ -52,6 +52,8 @@ export class PurchaseOrder {
       'Pending Approval',
       'Approved',
       'Issued',
+      'Partially Received',
+      'Fully Received',
       'Completed',
       'Cancelled',
     ],

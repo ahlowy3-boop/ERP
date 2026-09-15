@@ -11,13 +11,16 @@ import {
 } from 'class-validator';
 
 export class InspectedItemDto {
+  @IsString() @IsOptional() itemId?: string;
   @IsString() @IsNotEmpty() itemCode!: string;
-  @IsString() @IsNotEmpty() itemName!: string;
-  @IsNumber() @IsNotEmpty() quantityOrdered!: number;
+  @IsString() @IsOptional() itemName?: string;
+  @IsNumber() @IsOptional() quantityOrdered?: number;
+  @IsNumber() @IsOptional() quantityReceived?: number;
   @IsNumber() @IsNotEmpty() quantityAccepted!: number;
   @IsNumber() @IsNotEmpty() quantityRejected!: number;
   @IsString() @IsOptional() uom?: string;
-  @IsEnum(['Pending', 'Passed', 'Failed']) @IsOptional() status?: string;
+  @IsString() @IsOptional() status?: string;
+  @IsString() @IsOptional() remarks?: string;
 }
 
 export class SubmitInspectionDto {

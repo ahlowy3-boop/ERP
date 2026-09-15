@@ -37,10 +37,12 @@ export class InspectionController {
   async findAllInspections(
     @Query('page') page?: string,
     @Query('limit') limit?: string,
+    @Query('status') status?: string,
   ) {
     return this.inspectionService.findAllInspections(
       page ? parseInt(page) : 1,
       limit ? parseInt(limit) : 20,
+      status,
     );
   }
 

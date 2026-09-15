@@ -1,45 +1,158 @@
 import { MongooseModule, Prop, Schema, SchemaFactory } from '@nestjs/mongoose';
 import { HydratedDocument, Types } from 'mongoose';
 
-@Schema()
-class MRVItem {
-  @Prop({ type: Types.ObjectId, ref: 'Item', required: true })
-  itemId!: Types.ObjectId;
-  @Prop({ type: Number, required: true }) expectedQuantity!: number;
-  @Prop({ type: Number, required: true, min: 0 }) receivedQuantity!: number;
-  @Prop({ type: Number, default: 0 }) acceptedQuantity!: number;
-  @Prop({ type: Number, default: 0 }) rejectedQuantity!: number;
-  @Prop({ type: String }) notes?: string;
+@Schema({ _id: true, strict: false })
+export class MRVItem {
+  @Prop({ type: Types.ObjectId, ref: 'InventoryItem' })
+  itemId?: Types.ObjectId;
+
+  @Prop({ type: String })
+  itemCode?: string;
+
+  @Prop({ type: String })
+  itemName?: string;
+
+  @Prop({ type: String })
+  uom?: string;
+
+  @Prop({ type: Number, default: 0 })
+  quantityOrdered?: number;
+
+  @Prop({ type: Number, default: 0 })
+  quantityReceived?: number;
+
+  @Prop({ type: Number, default: 0 })
+  expectedQuantity?: number;
+
+  @Prop({ type: Number, default: 0 })
+  receivedQuantity?: number;
+
+  @Prop({ type: Number, default: 0 })
+  acceptedQuantity?: number;
+
+  @Prop({ type: Number, default: 0 })
+  rejectedQuantity?: number;
+
+  @Prop({ type: Number, default: 0 })
+  unitPrice?: number;
+
+  @Prop({ type: Number, default: 0 })
+  totalPrice?: number;
+
+  @Prop({ type: String })
+  location?: string;
+
+  @Prop({ type: String })
+  batchNumber?: string;
+
+  @Prop({ type: Date })
+  expiryDate?: Date;
+
+  @Prop({ type: String })
+  notes?: string;
 }
 
-@Schema({ timestamps: true })
+export const MRVItemSchema = SchemaFactory.createForClass(MRVItem);
+
+@Schema({ timestamps: true, strict: false })
 export class MRV {
-  @Prop({ type: String, required: true, unique: true }) mrvNumber!: string;
-  @Prop({ type: Types.ObjectId, ref: 'PurchaseOrder', required: true })
-  poId!: Types.ObjectId;
-  @Prop({ type: Types.ObjectId, ref: 'Vendor', required: true })
-  vendorId!: Types.ObjectId;
+  @Prop({ type: String, required: true, unique: true, index: true })
+  mrvNumber!: string;
 
-  @Prop({ type: String }) approvedBy?: string;
-  @Prop({ type: Date }) approvedAt?: Date;
+  @Prop({ type: String, index: true })
+  voucherNumber?: string;
 
-  @Prop({ type: Boolean, default: false }) isDeleted!: boolean;
+  @Prop({ type: Types.ObjectId, ref: 'PurchaseOrder' })
+  poId?: Types.ObjectId;
 
-  @Prop({ type: Date, required: true }) receivedDate!: Date;
-  @Prop({ type: String }) deliveryNoteNumber?: string; // رقم بوليصة الشحن من المورد
+  @Prop({ type: String })
+  poNumber?: string;
+
+  @Prop({ type: Types.ObjectId, ref: 'InspectionRequest' })
+  inspectionRequestId?: Types.ObjectId;
+
+  @Prop({ type: Types.ObjectId, ref: 'Warehouse' })
+  warehouseId?: Types.ObjectId;
+
+  @Prop({ type: String })
+  warehouseName?: string;
+
+  @Prop({ type: Types.ObjectId, ref: 'Vendor' })
+  vendorId?: Types.ObjectId;
+
+  @Prop({ type: Types.ObjectId, ref: 'Vendor' })
+  supplierId?: Types.ObjectId;
+
+  @Prop({ type: String })
+  supplierName?: string;
+
+  @Prop({ type: String })
+  vendorName?: string;
+
+  @Prop({ type: Date, default: Date.now })
+  receivedDate!: Date;
+
+  @Prop({ type: String })
+  receivedBy?: string;
+
+  @Prop({ type: Types.ObjectId, ref: 'User' })
+  receivedById?: Types.ObjectId;
+
+  @Prop({ type: String })
+  postedBy?: string;
+
+  @Prop({ type: Date })
+  postedAt?: Date;
+
+  @Prop({ type: String })
+  approvedBy?: string;
+
+  @Prop({ type: Date })
+  approvedAt?: Date;
+
+  @Prop({ type: String })
+  deliveryNoteNumber?: string; // رقم بوليصة الشحن من المورد
 
   @Prop({
     type: String,
-    enum: ['Draft', 'Inspected', 'Posted'],
+    enum: [
+      'Draft',
+      'Pending Approval',
+      'Approved',
+      'Inspected',
+      'Posted',
+      'Cancelled',
+    ],
     default: 'Draft',
   })
   status!: string;
 
-  @Prop({ type: [SchemaFactory.createForClass(MRVItem)], required: true })
+  @Prop({ type: Number, default: 0 })
+  totalAmount?: number;
+
+  @Prop({ type: String })
+  chargeType?: string; // 'OPEX' | 'CAPEX' | 'General Overhead'
+
+  @Prop({ type: Types.ObjectId, ref: 'Project' })
+  projectId?: Types.ObjectId;
+
+  @Prop({ type: String })
+  projectName?: string;
+
+  @Prop({ type: String })
+  costCenter?: string;
+
+  @Prop({ type: Types.ObjectId, ref: 'Equipment' })
+  assetId?: Types.ObjectId;
+
+  @Prop({ type: String })
+  assetName?: string;
+
+  @Prop({ type: [MRVItemSchema], required: true, default: [] })
   items!: MRVItem[];
 
-  @Prop({ type: Types.ObjectId, ref: 'User', required: true })
-  receivedById!: Types.ObjectId;
+  @Prop({ type: Boolean, default: false })
+  isDeleted!: boolean;
 }
 
 export const MRVSchema = SchemaFactory.createForClass(MRV);

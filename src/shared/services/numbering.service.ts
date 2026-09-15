@@ -91,4 +91,10 @@ export class NumberingService {
     const year = new Date().getFullYear();
     return `NCR-${year}-${seq}`;
   }
+
+  async generateIRNumber(session?: QueryOptions['session']): Promise<string> {
+    const seq = await this.getNextSequence('IR', session);
+    const year = new Date().getFullYear();
+    return `IR-${year}-${seq}`;
+  }
 }

@@ -40,6 +40,26 @@ export class MrvsController {
     return this.mrvsService.findOne(id);
   }
 
+  @Post(':id/post')
+  @RequirePermissions('edit:inventory')
+  async postMrv(
+    @Param('id') id: string,
+    @Body() postDto: any,
+    @CurrentUser('id') userId: string,
+  ) {
+    return this.mrvsService.postMrv(id, postDto, userId);
+  }
+
+  @Patch(':id/post')
+  @RequirePermissions('edit:inventory')
+  async postMrvPatch(
+    @Param('id') id: string,
+    @Body() postDto: any,
+    @CurrentUser('id') userId: string,
+  ) {
+    return this.mrvsService.postMrv(id, postDto, userId);
+  }
+
   @Patch(':id')
   @RequirePermissions('edit:inventory')
   async update(
@@ -49,7 +69,7 @@ export class MrvsController {
   ) {
     // Support: PATCH /mrvs/:id with { status: "Posted" } → approve and post inventory
     if (updateMrvDto.status === 'Posted' || updateMrvDto.status === 'Approved') {
-      return this.mrvsService.approve(id, userId);
+      return this.mrvsService.postMrv(id, updateMrvDto, userId);
     }
     return this.mrvsService.update(id, updateMrvDto, userId);
   }

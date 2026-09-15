@@ -2,8 +2,9 @@ import { MongooseModule, Prop, Schema, SchemaFactory } from '@nestjs/mongoose';
 import { HydratedDocument, Types } from 'mongoose';
 
 // Sub-Schema for Inspection Items
-@Schema({ _id: true })
+@Schema({ _id: true, strict: false })
 export class InspectionRequestItem {
+  @Prop({ type: Types.ObjectId, ref: 'InventoryItem' }) itemId?: Types.ObjectId;
   @Prop({ type: String, required: true }) itemCode!: string;
   @Prop({ type: String, required: true }) itemName!: string;
   @Prop({ type: Number, required: true }) quantityOrdered!: number;
@@ -17,22 +18,24 @@ export class InspectionRequestItem {
     default: 'Pending',
   })
   status!: string;
+  @Prop({ type: String }) remarks?: string;
 }
 const InspectionRequestItemSchema = SchemaFactory.createForClass(
   InspectionRequestItem,
 );
 
 // Main Inspection Request Schema
-@Schema({ timestamps: true })
+@Schema({ timestamps: true, strict: false })
 export class InspectionRequest {
-  @Prop({ type: String, unique: true, index: true }) requestNumber!: string; // INS-2026-001
+  @Prop({ type: String, unique: true, index: true }) requestNumber!: string; // IR-2026-0001 / INS-2026-001
 
   @Prop({ type: Types.ObjectId, ref: 'PurchaseOrder' }) poId?: Types.ObjectId;
   @Prop({ type: String }) poNumber?: string;
 
-  @Prop({ type: String }) vendorId?: string;
+  @Prop({ type: Types.ObjectId, ref: 'Vendor' }) vendorId?: Types.ObjectId;
   @Prop({ type: String, required: true }) vendorName!: string;
 
+  @Prop({ type: Date, default: Date.now }) requestDate!: Date;
   @Prop({ type: Date, default: Date.now }) requestedDate!: Date;
   @Prop({ type: String }) inspectorName?: string;
   @Prop({ type: Date }) inspectionDate?: Date;

@@ -8,6 +8,10 @@ import { PurchaseOrdersRepository } from './purchase-orders.repository';
   imports: [PurchaseOrderModel],
   controllers: [PurchaseOrdersController],
   providers: [PurchaseOrdersService, PurchaseOrdersRepository],
-  exports: [PurchaseOrdersService, PurchaseOrdersRepository],
+  exports: [
+    PurchaseOrdersService,
+    PurchaseOrdersRepository,
+    PurchaseOrderModel,
+  ],
 })
 export class PurchaseOrdersModule {}
