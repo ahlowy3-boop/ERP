@@ -26,6 +26,7 @@ import { PurchaseRequestsModule } from './modules/procurement/purchase-requests/
 import { PurchaseOrdersModule } from './modules/procurement/purchase-orders/purchase-orders.module';
 import { RfqsModule } from './modules/procurement/rfqs/rfqs.module';
 import { QuotationComparisonModule } from './modules/procurement/quotation-comparison/quotation-comparison.module';
+import { InspectionModule } from './modules/procurement/inspection/inspection.module';
 import { VendorsModule } from './modules/vendors/vendors.module';
 import { VendorPortalModule } from './modules/vendor-portal/vendor-portal.module';
 import { MrvsModule } from './modules/inventory/mrvs/mrvs.module';
@@ -138,6 +139,7 @@ import { HseModule } from './modules/hse/hse.module';
     PurchaseOrdersModule,
     RfqsModule,
     QuotationComparisonModule,
+    InspectionModule,
     VendorsModule,
     VendorPortalModule,
     // Inventory Module (complete)
