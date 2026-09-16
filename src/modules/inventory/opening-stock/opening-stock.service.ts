@@ -135,7 +135,10 @@ export class OpeningStockService {
           'Duplicate opening stock: same item, warehouse, date and batch already exists',
         );
       }
-      throw new InternalServerErrorException(err.message);
+      if (err instanceof BadRequestException || err instanceof NotFoundException) {
+        throw err;
+      }
+      throw new BadRequestException(`Failed to create opening stock: ${err.message}`);
     } finally {
       session.endSession();
     }
@@ -143,7 +146,13 @@ export class OpeningStockService {
 
   // ─── Post (activate) an Opening Stock record → updates ledger & item qty ──
   async post(id: string, userId?: string) {
-    const record = await this._OSRepo.findOne({ filter: { _id: id } });
+    let record: any = null;
+    if (Types.ObjectId.isValid(id)) {
+      record = await this._OSRepo.findOne({ filter: { _id: id } });
+    }
+    if (!record) {
+      record = await this._OSRepo.findOne({ filter: { openingNumber: id } });
+    }
     if (!record) throw new NotFoundException('Opening stock record not found');
     if ((record as any).status === 'Posted' || (record as any).status === 'POSTED') {
       throw new BadRequestException('Already posted');
@@ -166,7 +175,7 @@ export class OpeningStockService {
 
       const updated = await this._OSRepo.model
         .findByIdAndUpdate(
-          id,
+          record._id,
           { $set: { status: 'POSTED', postedAt: new Date() } },
           { new: true, session },
         )
@@ -176,7 +185,10 @@ export class OpeningStockService {
       return { success: true, message: 'Opening stock posted successfully', data: updated };
     } catch (err: any) {
       await session.abortTransaction();
-      throw new InternalServerErrorException(err.message);
+      if (err instanceof BadRequestException || err instanceof NotFoundException) {
+        throw err;
+      }
+      throw new BadRequestException(`Failed to post opening stock: ${err.message}`);
     } finally {
       session.endSession();
     }
@@ -184,21 +196,29 @@ export class OpeningStockService {
 
   // ─── Delete / Cancel Opening Stock ─────────────────────────────────────────
   async remove(id: string, userId?: string) {
-    const record = await this._OSRepo.findOne({ filter: { _id: id } });
+    let record: any = null;
+    if (Types.ObjectId.isValid(id)) {
+      record = await this._OSRepo.findOne({ filter: { _id: id } });
+    }
+    if (!record) {
+      record = await this._OSRepo.findOne({ filter: { openingNumber: id } });
+    }
     if (!record) throw new NotFoundException('Opening stock record not found');
 
     const status = (record as any).status;
 
     // If Draft: Hard delete
-    if (status === 'Draft') {
-      await this._OSRepo.model.findByIdAndDelete(id);
+    if (status === 'Draft' || status === 'DRAFT') {
+      await this._OSRepo.model.findByIdAndDelete(record._id);
       this.logger.log(`Draft opening stock ${(record as any).openingNumber} deleted`);
       return { success: true, message: 'Opening stock draft deleted successfully' };
     }
 
-    // If already cancelled
+    // If already cancelled: Cleanly delete from database
     if (status === 'Cancelled' || status === 'CANCELLED') {
-      throw new BadRequestException('Opening stock record is already cancelled');
+      await this._OSRepo.model.findByIdAndDelete(record._id);
+      this.logger.log(`Cancelled opening stock ${(record as any).openingNumber} deleted`);
+      return { success: true, message: 'Cancelled opening stock deleted successfully' };
     }
 
     // If Posted / POSTED: Reverse stock impact & soft-cancel
@@ -206,23 +226,26 @@ export class OpeningStockService {
       const session = await this.connection.startSession();
       session.startTransaction();
       try {
-        // Reverse stock by deducting previously added quantity
-        await this._InventoryEngine.deductStock(
+        // Reverse stock safely up to available quantity (prevents negative inventory)
+        await this._InventoryEngine.reverseStock(
           (record as any).itemCode,
           (record as any).openingQuantity,
-          (record as any).openingNumber,
+          (record as any).openingNumber || 'OS-CANCEL',
           'ADJ',
           session,
         );
 
         const updated = await this._OSRepo.model
           .findByIdAndUpdate(
-            id,
+            record._id,
             {
               $set: {
                 status: 'CANCELLED',
                 cancelledAt: new Date(),
-                cancelledBy: userId && Types.ObjectId.isValid(userId) ? new Types.ObjectId(userId) : undefined,
+                cancelledBy:
+                  userId && Types.ObjectId.isValid(userId)
+                    ? new Types.ObjectId(userId)
+                    : undefined,
               },
             },
             { new: true, session },
@@ -230,7 +253,9 @@ export class OpeningStockService {
           .lean();
 
         await session.commitTransaction();
-        this.logger.log(`Posted opening stock ${(record as any).openingNumber} cancelled and stock impact reversed`);
+        this.logger.log(
+          `Posted opening stock ${(record as any).openingNumber} cancelled and stock impact reversed`,
+        );
         return {
           success: true,
           message: 'Opening stock cancelled and stock impact reversed successfully',
@@ -238,7 +263,11 @@ export class OpeningStockService {
         };
       } catch (err: any) {
         await session.abortTransaction();
-        throw new InternalServerErrorException(`Failed to cancel opening stock: ${err.message}`);
+        this.logger.error(`Failed to cancel opening stock: ${err.message}`, err.stack);
+        if (err instanceof BadRequestException || err instanceof NotFoundException) {
+          throw err;
+        }
+        throw new BadRequestException(`Failed to cancel opening stock: ${err.message}`);
       } finally {
         session.endSession();
       }
@@ -276,7 +305,13 @@ export class OpeningStockService {
 
   // ─── Find One ──────────────────────────────────────────────────────────────
   async findOne(id: string) {
-    const record = await this._OSRepo.findOne({ filter: { _id: id } });
+    let record: any = null;
+    if (Types.ObjectId.isValid(id)) {
+      record = await this._OSRepo.findOne({ filter: { _id: id } });
+    }
+    if (!record) {
+      record = await this._OSRepo.findOne({ filter: { openingNumber: id } });
+    }
     if (!record) throw new NotFoundException('Opening stock record not found');
     return { success: true, data: record };
   }
@@ -586,7 +621,10 @@ export class OpeningStockService {
     } catch (err: any) {
       await session.abortTransaction();
       this.logger.error(`Excel import transaction failed: ${err.message}`, err.stack);
-      throw new InternalServerErrorException(`Import and posting failed: ${err.message}`);
+      if (err instanceof BadRequestException || err instanceof NotFoundException) {
+        throw err;
+      }
+      throw new BadRequestException(`Import and posting failed: ${err.message}`);
     } finally {
       session.endSession();
     }

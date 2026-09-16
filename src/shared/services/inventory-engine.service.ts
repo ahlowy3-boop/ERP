@@ -58,6 +58,44 @@ export class InventoryEngineService {
     return updatedItem;
   }
 
+  // عكس كميات من المخزون بأمان (يُستخدم عند إلغاء الأرصدة الافتتاحية دون التسبب بأرصدة سالبة)
+  async reverseStock(
+    itemCode: string,
+    quantityToDeduct: number,
+    reference: string,
+    type: string = 'ADJ',
+    session?: QueryOptions['session'],
+  ) {
+    const item = await this._InventoryItemRepository.findOne({
+      filter: { itemCode },
+      options: { session },
+    });
+    if (!item) throw new BadRequestException(`Item ${itemCode} not found`);
+
+    const actualDeduct = Math.min(item.quantity || 0, quantityToDeduct);
+    if (actualDeduct > 0) {
+      item.quantity = (item.quantity || 0) - actualDeduct;
+      await this.updateItemStatus(item, session);
+      await item.save({ session });
+
+      await this._ItemLedgerRepository.create(
+        {
+          itemCode,
+          date: new Date(),
+          type,
+          reference,
+          qtyIn: 0,
+          qtyOut: actualDeduct,
+          balance: item.quantity,
+          unitPrice: item.unitPrice || 0,
+        },
+        { session },
+      );
+    }
+
+    return item;
+  }
+
   // إضافة كميات للمخزون (يُستخدم عند استلام MRV)
   async addStock(
     itemCode: string,
