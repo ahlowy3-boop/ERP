@@ -39,6 +39,36 @@ export class MivsController {
     return this.mivsService.findOne(id);
   }
 
+  @Post(':id/post')
+  @RequirePermissions('edit:inventory')
+  async postMiv(
+    @Param('id') id: string,
+    @Body() postDto: any,
+    @CurrentUser('id') userId: string,
+  ) {
+    return this.mivsService.postMiv(id, postDto, userId);
+  }
+
+  @Patch(':id/post')
+  @RequirePermissions('edit:inventory')
+  async postMivPatch(
+    @Param('id') id: string,
+    @Body() postDto: any,
+    @CurrentUser('id') userId: string,
+  ) {
+    return this.mivsService.postMiv(id, postDto, userId);
+  }
+
+  @Post(':id/approve')
+  @RequirePermissions('edit:inventory')
+  async approvePost(
+    @Param('id') id: string,
+    @Body() postDto: any,
+    @CurrentUser('id') userId: string,
+  ) {
+    return this.mivsService.postMiv(id, postDto, userId);
+  }
+
   @Patch(':id')
   @RequirePermissions('edit:inventory')
   async update(
@@ -48,7 +78,7 @@ export class MivsController {
   ) {
     // Support: PATCH /mivs/:id with { status: "Posted" } → approve and deduct inventory
     if (updateMivDto.status === 'Posted' || updateMivDto.status === 'Approved') {
-      return this.mivsService.approve(id, userId);
+      return this.mivsService.postMiv(id, updateMivDto, userId);
     }
     return this.mivsService.update(id, updateMivDto, userId);
   }
