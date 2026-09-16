@@ -71,8 +71,12 @@ import { FinanceModule } from './modules/finance/finance.module';
 // 🦺 HSE Module
 import { HseModule } from './modules/hse/hse.module';
 
+// 📊 Main Dashboard Module (Procurement & Inventory Real Statistics)
+import { MainDashboardModule } from './modules/dashboard/dashboard.module';
+
 @Module({
   imports: [
+    MainDashboardModule,
     // 1. إعدادات متغيرات البيئة
     ConfigModule.forRoot({
       isGlobal: true,
