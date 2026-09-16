@@ -176,9 +176,6 @@ export class MivsService {
     const findQuery = this.mivModel
       .find(filter)
       .populate('warehouseId')
-      .populate('projectId')
-      .populate({ path: 'requestedBy', select: 'name email username' })
-      .populate({ path: 'createdBy', select: 'name email username' })
       .sort({ createdAt: -1 });
 
     if (
@@ -190,6 +187,8 @@ export class MivsService {
       limit > 0
     ) {
       findQuery.skip((page - 1) * limit).limit(limit);
+    } else if (limit && !isNaN(limit) && limit > 0) {
+      findQuery.limit(limit);
     }
 
     const items = await findQuery.exec();
@@ -201,10 +200,9 @@ export class MivsService {
     if (Types.ObjectId.isValid(id)) {
       miv = await this.mivModel
         .findById(id)
-        .populate('warehouseId projectId')
-        .populate({ path: 'requestedBy', select: 'name email username' })
-        .populate({ path: 'createdBy', select: 'name email username' })
-        .populate('items.itemId');
+        .populate('warehouseId')
+        .populate('items.itemId')
+        .exec();
     }
     if (!miv) {
       miv = await this.mivModel
@@ -215,10 +213,9 @@ export class MivsService {
             { documentNumber: id },
           ],
         })
-        .populate('warehouseId projectId')
-        .populate({ path: 'requestedBy', select: 'name email username' })
-        .populate({ path: 'createdBy', select: 'name email username' })
-        .populate('items.itemId');
+        .populate('warehouseId')
+        .populate('items.itemId')
+        .exec();
     }
     if (!miv) throw new NotFoundException('MIV not found');
     return { data: miv };
