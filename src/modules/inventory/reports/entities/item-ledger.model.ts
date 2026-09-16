@@ -78,6 +78,8 @@ export class ItemLedger {
 }
 
 export const ItemLedgerSchema = SchemaFactory.createForClass(ItemLedger);
+ItemLedgerSchema.index({ itemCode: 1, date: 1, warehouseId: 1 });
+ItemLedgerSchema.index({ itemId: 1, date: 1 });
 export const ItemLedgerModelName = ItemLedger.name;
 export const ItemLedgerModel = MongooseModule.forFeature([
   { name: ItemLedgerModelName, schema: ItemLedgerSchema },

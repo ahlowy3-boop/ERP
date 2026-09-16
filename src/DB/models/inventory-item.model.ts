@@ -61,6 +61,7 @@ export class InventoryItem {
 }
 
 export const InventoryItemSchema = SchemaFactory.createForClass(InventoryItem);
+InventoryItemSchema.index({ itemCode: 1, quantity: 1, minQuantity: 1 });
 
 // 🔥 أتمتة قاعدة العمل (Business Rule): تحديث حالة المخزون تلقائياً قبل الحفظ
 InventoryItemSchema.pre('save', function () {

@@ -156,6 +156,7 @@ export class MRV {
 }
 
 export const MRVSchema = SchemaFactory.createForClass(MRV);
+MRVSchema.index({ status: 1, createdAt: 1, 'items.itemId': 1 });
 export const MRVModelName = MRV.name;
 export type MRVDocument = HydratedDocument<MRV>;
 export const MRVModel = MongooseModule.forFeature([

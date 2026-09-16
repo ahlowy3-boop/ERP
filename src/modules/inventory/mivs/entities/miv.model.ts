@@ -98,6 +98,7 @@ export class MIV {
 }
 
 export const MIVSchema = SchemaFactory.createForClass(MIV);
+MIVSchema.index({ status: 1, createdAt: 1, 'items.itemId': 1 });
 export type MIVDocument = HydratedDocument<MIV>;
 export const MIVModelName = MIV.name;
 export const MIVModel = MongooseModule.forFeature([
